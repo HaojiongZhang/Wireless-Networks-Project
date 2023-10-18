@@ -146,29 +146,29 @@ void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* file
     			if(bytes_left > PKT_SIZE){
 			    	  bytesRead = fread(tmp_buffer, sizeof(char),PKT_SIZE,fp);
 			    	  bytes_left -= bytesRead;
-		  	}else{
+		  		}else{
 			    	
 			    	 bytesRead = fread(tmp_buffer, sizeof(char),bytes_left,fp);
 			    	 bytes_left -= bytesRead;
 			    	 cout << "final bytes Read: " << bytesRead << endl;
 			    	 cout << "read buff content: " << tmp_buffer << endl;
 			    
-			    	}
-			  tmp.seq_num = latestSeqNum;
-			  latestSeqNum ++;
-			  tmp.ack_num = -1;
-			  tmp.RSF = DATA;
-			  tmp.datalen = bytesRead;
-			  memcpy(tmp.data, &tmp_buffer, sizeof(char)*bytesRead);
-			  //save a copy to NotYetACK
-			  NotYetACK.push_back(tmp);
-			  timestamps.push_back(high_resolution_clock::now());    //keep track of current timestamp
-			  //send current pkt 
-			   memcpy(snd_buffer, &tmp, sizeof(pkt));
-		    	   if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){  //  sendto?????
+			    }
+			  	tmp.seq_num = latestSeqNum;
+			  	latestSeqNum ++;
+			  	tmp.ack_num = -1;
+			  	tmp.RSF = DATA;
+			  	tmp.datalen = bytesRead;
+			  	memcpy(tmp.data, &tmp_buffer, sizeof(char)*bytesRead);
+			  	//save a copy to NotYetACK
+			  	NotYetACK.push_back(tmp);
+			  	timestamps.push_back(high_resolution_clock::now());    //keep track of current timestamp
+			  	//send current pkt 
+			   	memcpy(snd_buffer, &tmp, sizeof(pkt));
+		    	if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){  //  sendto?????
 		    	   	cout<<"fail to send seq_num: " << tmp.seq_num << endl;
 		    	   	exit(1);
-		    	   }else{ }//cout<<"sent seq_num: " << tmp.seq_num <<endl;}
+		    	}else{ }//cout<<"sent seq_num: " << tmp.seq_num <<endl;}
     		}
     		//receiving pkt
     		if((numbytes = recvfrom(s,rcv_buffer,sizeof(pkt),0,(struct sockaddr*)&si_other,(socklen_t*)&slen))==-1){   //rcv timeout
