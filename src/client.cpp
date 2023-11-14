@@ -42,8 +42,6 @@ void diep(char *s) {
 void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
     
     slen = sizeof (si_other);
-
-
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         diep("socket");
 
@@ -143,10 +141,7 @@ void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
     close(s);
     printf("%s received.", destinationFile);
     return;
-    
-    
-    
-    
+
     }
 	
 
@@ -163,6 +158,13 @@ int main(int argc, char** argv) {
     }
 
     udpPort = (unsigned short int) atoi(argv[1]);
+
+	const char* directory = "/Users/johnzhang/Desktop/wireless_multipath/receive";
+    char destinationPath[1024];
+
+    // Construct the full path to the destination file
+    snprintf(destinationPath, sizeof(destinationPath), "%s%s", directory, argv[2]);
+
 
     reliablyReceive(udpPort, argv[2]);
 }
