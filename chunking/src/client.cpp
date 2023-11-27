@@ -12,6 +12,8 @@
 #include <net/if.h>
 #include <cstring>
 
+#include <fileIO.h>
+
 #define KB 1024
 
 const int CHUNK_SIZE = 1024; // Must be the same as in the sender program

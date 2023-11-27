@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <thread>
+#include "fileIO.h"
 
 #define KB 1024
 
@@ -44,29 +45,37 @@ int createSocketAndConnect(int port, const char* serverIP, const char* interface
 }
 
 void sendChunk(const char* filename, int startChunk, int socket, int totalChunks) {
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file" << std::endl;
-        exit(1);
-    }
-
-    int chunkNumber = startChunk;
-    while (chunkNumber < totalChunks) {
-        Packet packet;
-        packet.chunkNumber = chunkNumber;
-
-        file.seekg(chunkNumber * CHUNK_SIZE, std::ios::beg);
-        file.read(packet.data, CHUNK_SIZE);
-        std::streamsize bytes = file.gcount();
-
-        if (bytes > 0) {
+    
+    Packet packet;
+    uint32_t currentChunk = 0;
+    while (currentChunk < totalChunks - 1){
+        int bytes = readNextChunk(packet.data, &(packet.chunkNumber), 0);
+        if (bytes > 0){
             send(socket, &packet, sizeof(packet), 0);
         }
-
-        chunkNumber += 2; // Increment by 2 to cover alternating chunks
     }
 
-    file.close();
+    (void)startChunk;
+    (void)filename;
+    
+
+    // int chunkNumber = startChunk;
+    // while (chunkNumber < totalChunks) {
+    //     // Packet packet;
+    //     // packet.chunkNumber = chunkNumber;
+
+    //     // file.seekg(chunkNumber * CHUNK_SIZE, std::ios::beg);
+    //     // file.read(packet.data, CHUNK_SIZE);
+    //     std::streamsize bytes = file.gcount();
+
+    //     if (bytes > 0) {
+    //         send(socket, &packet, sizeof(packet), 0);
+    //     }
+
+    //     chunkNumber += 2; // Increment by 2 to cover alternating chunks
+    // }
+
+    // file.close();
 }
 int main(int argc, char** argv) {
     if (argc != 4) {
@@ -80,14 +89,16 @@ int main(int argc, char** argv) {
     int port = std::stoi(argv[4]);
 
     // Calculate the total number of chunks
-    std::ifstream file(filename, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file for size calculation" << std::endl;
-        return 1;
-    }
-    std::streamoff fileSize = file.tellg();
-    int totalChunks = static_cast<int>((fileSize + CHUNK_SIZE - 1) / CHUNK_SIZE);
-    file.close();
+    // std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    // if (!file.is_open()) {
+    //     std::cerr << "Error opening file for size calculation" << std::endl;
+    //     return 1;
+    // }
+    // std::streamoff fileSize = file.tellg();
+    // int totalChunks = static_cast<int>((fileSize + CHUNK_SIZE - 1) / CHUNK_SIZE);
+    // file.close();
+
+    int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE, 2);
 
 
     const char* interfaceName1 = "wlan0";
