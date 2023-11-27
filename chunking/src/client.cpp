@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <cstring>
 #include <map>
+#include <net/if.h>
+#include <cstring>
 
 #define KB 1024
 
@@ -22,11 +24,17 @@ struct Packet {
 std::mutex fileMutex;
 std::map<int, std::vector<char>> chunkMap;
 
-int createSocketAndBind(int port) {
+int createSocketAndBind(int port, const char* interfaceName) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         std::cerr << "Error opening socket" << std::endl;
         exit(1);
+    }
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)) < 0) {
+        std::cerr << "Error binding to interface" << std::endl;
+        close(sockfd);
+        return -1;
     }
 
     sockaddr_in serv_addr;
@@ -35,6 +43,8 @@ int createSocketAndBind(int port) {
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(port);
 
+    
+
     if (bind(sockfd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Error on binding" << std::endl;
         exit(1);
@@ -42,6 +52,8 @@ int createSocketAndBind(int port) {
 
     return sockfd;
 }
+
+
 
 int acceptConnection(int sockfd) {
     listen(sockfd, 5);
@@ -93,8 +105,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int socket1 = createSocketAndBind(port);
-    int socket2 = createSocketAndBind(port + 1);
+    const char* interfaceName1 = "wlan0";
+    const char* interfaceName2 = "espst0";
+
+    int socket1 = createSocketAndBind(port, interfaceName1);
+    int socket2 = createSocketAndBind(port + 1, interfaceName2);
 
     int newSocket1 = acceptConnection(socket1);
     int newSocket2 = acceptConnection(socket2);
