@@ -23,8 +23,7 @@ int initFileRead(char* path, size_t bytesPerChunk, bool twoEnds){
     stat(path, &st);
     int fileSize = st.st_size;
     chunkSize = bytesPerChunk;
-    totalChunks = fileSize / bytesPerChunk;
-    totalChunks = (totalChunks*bytesPerChunk == fileSize) ? totalChunks : totalChunks+1;
+    totalChunks = (fileSize + chunkSize - 1)/ bytesPerChunk;
     isReadingBothEnds = twoEnds;
     chunkIdx_t0 = 0;
     chunkIdx_t1 = isReadingBothEnds ? totalChunks - 1 : 1;

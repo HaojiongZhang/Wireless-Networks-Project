@@ -16,11 +16,17 @@ struct Packet {
     char data[CHUNK_SIZE];
 };
 
-int createSocketAndConnect(int port, const char* serverIP) {
+int createSocketAndConnect(int port, const char* serverIP, const char* interfaceName) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         std::cerr << "Error opening socket" << std::endl;
         exit(1);
+    }
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)) < 0) {
+        std::cerr << "Error binding to interface" << std::endl;
+        close(sockfd);
+        return -1;
     }
 
     sockaddr_in serv_addr;
@@ -64,13 +70,14 @@ void sendChunk(const char* filename, int startChunk, int socket, int totalChunks
 }
 int main(int argc, char** argv) {
     if (argc != 4) {
-        std::cerr << "Usage: " << argv[0] << " <filename> <server IP> <port>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <filename> <server IP> <esp32 IP> <port>" << std::endl;
         return 1;
     }
 
     const char* filename = argv[1];
     const char* serverIP = argv[2];
-    int port = std::stoi(argv[3]);
+    const char* espIP = argv[3];
+    int port = std::stoi(argv[4]);
 
     // Calculate the total number of chunks
     std::ifstream file(filename, std::ios::binary | std::ios::ate);
@@ -82,9 +89,13 @@ int main(int argc, char** argv) {
     int totalChunks = static_cast<int>((fileSize + CHUNK_SIZE - 1) / CHUNK_SIZE);
     file.close();
 
+
+    const char* interfaceName1 = "wlan0";
+    const char* interfaceName2 = "espst0";
+
     // Create two sockets for two threads
-    int socket1 = createSocketAndConnect(port, serverIP);
-    int socket2 = createSocketAndConnect(port + 1, serverIP);
+    int socket1 = createSocketAndConnect(port, serverIP, interfaceName1);
+    int socket2 = createSocketAndConnect(port + 1, espIP, interfaceName2);
 
     // Start two threads for sending chunks
     std::thread thread1(sendChunk, filename, 0, socket1, totalChunks); // Thread 1 starts with chunk 0
