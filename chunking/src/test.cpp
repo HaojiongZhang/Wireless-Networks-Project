@@ -4,13 +4,13 @@
 #include <iostream>
 #include <thread>
 
-#define CHUNKSIZE 32
+#define CHUNKSIZE 1024
 
-void testRead(int totalChunks, int thread){
+void testRead(int thread){
     char read[CHUNKSIZE];
     int chunk = 0;
-    while (chunk < totalChunks - 1){
-        readNextChunk(read, &chunk, thread);
+    while (hasMoreChunks(thread)){
+        readChunk(read, &chunk, thread);
         printf("char: %s, chunk:%d, thread:%d \n", read, chunk, thread);
     }
 }
@@ -21,10 +21,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int totalChunks = initFileRead(argv[1], CHUNKSIZE, CONSECUTIVE, 2);
+    initFileRead(argv[1], CHUNKSIZE, HALF_HALF);
 
-    std::thread t0(testRead, totalChunks, 0);
-    std::thread t1(testRead, totalChunks, 1);
+    std::thread t0(testRead, 0);
+    std::thread t1(testRead, 1);
 
     t0.join();
     t1.join();

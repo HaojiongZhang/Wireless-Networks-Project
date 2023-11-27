@@ -44,38 +44,16 @@ int createSocketAndConnect(int port, const char* serverIP, const char* interface
     return sockfd;
 }
 
-void sendChunk(const char* filename, int startChunk, int socket, int totalChunks) {
+void sendChunk(int socket, int threadNum) {
     
     Packet packet;
     uint32_t currentChunk = 0;
-    while (currentChunk < totalChunks - 1){
-        int bytes = readNextChunk(packet.data, &(packet.chunkNumber), 0);
+    while (hasMoreChunks(threadNum)){
+        int bytes = readChunk(packet.data, &(packet.chunkNumber), threadNum);
         if (bytes > 0){
             send(socket, &packet, sizeof(packet), 0);
         }
     }
-
-    (void)startChunk;
-    (void)filename;
-    
-
-    // int chunkNumber = startChunk;
-    // while (chunkNumber < totalChunks) {
-    //     // Packet packet;
-    //     // packet.chunkNumber = chunkNumber;
-
-    //     // file.seekg(chunkNumber * CHUNK_SIZE, std::ios::beg);
-    //     // file.read(packet.data, CHUNK_SIZE);
-    //     std::streamsize bytes = file.gcount();
-
-    //     if (bytes > 0) {
-    //         send(socket, &packet, sizeof(packet), 0);
-    //     }
-
-    //     chunkNumber += 2; // Increment by 2 to cover alternating chunks
-    // }
-
-    // file.close();
 }
 int main(int argc, char** argv) {
     if (argc != 4) {
@@ -88,18 +66,8 @@ int main(int argc, char** argv) {
     const char* espIP = argv[3];
     int port = std::stoi(argv[4]);
 
-    // Calculate the total number of chunks
-    // std::ifstream file(filename, std::ios::binary | std::ios::ate);
-    // if (!file.is_open()) {
-    //     std::cerr << "Error opening file for size calculation" << std::endl;
-    //     return 1;
-    // }
-    // std::streamoff fileSize = file.tellg();
-    // int totalChunks = static_cast<int>((fileSize + CHUNK_SIZE - 1) / CHUNK_SIZE);
-    // file.close();
-
-    int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE, 2);
-
+    // Set partition type to initialize file chunking
+    int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);
 
     const char* interfaceName1 = "wlan0";
     const char* interfaceName2 = "espst0";
@@ -109,8 +77,8 @@ int main(int argc, char** argv) {
     int socket2 = createSocketAndConnect(port + 1, espIP, interfaceName2);
 
     // Start two threads for sending chunks
-    std::thread thread1(sendChunk, filename, 0, socket1, totalChunks); // Thread 1 starts with chunk 0
-    std::thread thread2(sendChunk, filename, 1, socket2, totalChunks); // Thread 2 starts with chunk 1
+    std::thread thread1(sendChunk, socket1, 0); // Thread 1 starts with chunk 0
+    std::thread thread2(sendChunk, socket2, 1); // Thread 2 starts with chunk 1
 
     // Wait for both threads to finish
     thread1.join();
