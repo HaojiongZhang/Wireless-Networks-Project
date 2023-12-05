@@ -60,7 +60,11 @@ void sendChunk(const char* filename, int startChunk, int socket, int totalChunks
         std::streamsize bytes = file.gcount();
 
         if (bytes > 0) {
-            send(socket, &packet, sizeof(packet), 0);
+            char tmpBuffer[sizeof(packet)];
+            
+            memcpy(tmpBuffer, &packet, sizeof(packet));
+            
+            send(socket, tmpBuffer, sizeof(tmpBuffer), 0);
         }
 
         chunkNumber += 2; // Increment by 2 to cover alternating chunks
