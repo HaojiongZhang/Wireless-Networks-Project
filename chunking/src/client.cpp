@@ -11,17 +11,22 @@
 #include <map>
 #include <net/if.h>
 #include <cstring>
+#include <condition_variable>
+
+
 
 #define KB 1024
 
 const int CHUNK_SIZE = 1024; // Must be the same as in the sender program
+bool finishedReceiving;
+std::condition_variable cv;
 
 struct Packet {
     int chunkNumber;
     char data[CHUNK_SIZE];
 };
 
-std::mutex fileMutex;
+std::mutex chunkMapMutex;
 std::map<int, std::vector<char>> chunkMap;
 
 int createSocketAndBind(int port, const char* interfaceName) {
@@ -129,6 +134,7 @@ int main(int argc, char** argv) {
     int newSocket2 = acceptConnection(socket2);
 
     int nextChunk = 0;
+    finishedReceiving = false;
     std::thread thread1(receiveData, newSocket1);
     std::thread thread2(receiveData, newSocket2);
     std::thread writerThread(writeData, std::ref(file), std::ref(nextChunk));
