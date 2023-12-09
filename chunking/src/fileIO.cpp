@@ -13,7 +13,7 @@ partition_t partitionType;
 
 static int currentChunk = 0;
 
-int readPartitionedChunk(char* buf, int* chunkNumPtr, int partition);
+int readAltChunk(char* buf, int* chunkNumPtr, int partition);
 int readSequentialChunk(char* buf, int* chunkNumPtr);
 
 
@@ -53,7 +53,7 @@ int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype)
 int readChunk(char* buf, int* chunkNumPtr, int partition){
     switch (partitionType){
     case HALF_HALF:
-        return readPartitionedChunk(buf, chunkNumPtr, partition);
+        return readAltChunk(buf, chunkNumPtr, partition);
     case CONSECUTIVE:
         (void) partition;
         return readSequentialChunk(buf, chunkNumPtr);
@@ -84,7 +84,7 @@ bool hasMoreChunks(int thread){
 }
 
 
-int readPartitionedChunk(char* buf, int* chunkNumPtr, int partition){
+int readAltChunk(char* buf, int* chunkNumPtr, int partition){
     memset(buf, 0, chunkSize);
     int *chunk, finalChunk;
     if (partition == 0){

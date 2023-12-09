@@ -1,12 +1,24 @@
-#ifndef __file_IO-h__
+#ifndef __file_IO_h__
 #define __file_IO_h__
 
 #include <stdint.h>
 
+enum partition_t{
+    ALTERNATE,
+    CONSECUTIVE,
+    TWOENDS
+};
+
+
 // Return total number of chunks that the file has
-int initFileRead(char* path, size_t bytesPerChunk, bool twoEnds);
-int readChunk_t0(int8_t* buf);
-int readChunk_t1(int8_t* buf);
+int initFileRead(const char* path, int bytesPerChunk, partition_t partition);
+// get next chunk in the buf, get chunk index in *chunkNumPtr
+int readChunk(char* buf, int* chunkNumPtr, int thread);
+bool hasMoreChunks(int thread);
+
+void closeFile();
+
+
 
 
 #endif

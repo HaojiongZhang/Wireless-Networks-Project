@@ -18,6 +18,8 @@
 #include <errno.h>
 #include <deque>
 #include <chrono>
+#include <thread>
+#include "fileIO.h"
 
 
 using namespace std;
@@ -32,6 +34,7 @@ int ssthres = 64;
 
 #define KB 1000
 #define PKT_SIZE 1400
+#define CHUNK_SIZE 0
 
 #define FIN 0
 #define DATA 1
@@ -74,21 +77,9 @@ int cogctrl(int cwnd, int multiACK, bool timeout){
 	return cwnd;
 
 }
-void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* inputBuffer, unsigned long long int bytesToTransfer) {
-    //Open the file
-    
-    
-      /* setting up packet buffer      */
-    int TOTAL_BUFF_SIZE = 1000;
-    int finalPKTNum = ceil(static_cast<double>(bytesToTransfer)/PKT_SIZE);
-    int bytes_left = bytesToTransfer;
-    
-    //pkt dataBuffer[TOTAL_BUFF_SIZE];
 
-    
-	/* Determine how many bytes to transfer */
-
-    slen = sizeof (si_other);
+int createSocket(char* hostname, unisgned short int hostUDPport){
+	slen = sizeof (si_other);
 
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         diep("socket");
@@ -108,9 +99,28 @@ void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* inpu
     if(setsockopt(s,SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))<0){
     	cout << "Error Setting TimeOut" << strerror(errno) << endl;
     	exit(1);
-    
     }
+
+	return s;
+}
+
+
+void reliablyTransfer(int s, char* inputBuffer, unsigned long long int bytesToTransfer) {
+    //Open the file
     
+    
+      /* setting up packet buffer      */
+    int TOTAL_BUFF_SIZE = 1000;
+    int finalPKTNum = ceil(static_cast<double>(bytesToTransfer)/PKT_SIZE);
+    int bytes_left = bytesToTransfer;
+    
+    //pkt dataBuffer[TOTAL_BUFF_SIZE];
+
+    
+	/* Determine how many bytes to transfer */
+
+    
+    // end - move this out //
     
 	/* Send data and receive acknowledgements on s*/
     int numbytes;
@@ -248,35 +258,32 @@ void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* inpu
 				    		if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){   //sendto ??????
 				    		 	cout << "Failed to send FIN " << endl;
 				    		 	exit(1);
-				    		 }else{cout << "3 duplicate ACK, resend: " << NotYetACK.front().seq_num << endl;}
-			    		  	
+				    		}
+							else{
+								cout << "3 duplicate ACK, resend: " << NotYetACK.front().seq_num << endl;
+							}
 		    		  	}
-		    		  }
-		    		
-		    		
 		    		}
-    		
-    		
-    		
-    		
+		    	}
     		}
-    		
-    			
-	    	
-     	
     	}
-    
-    
     }	
-	
-
-    printf("Closing the socket\n");
-    close(s);
-    return;
-
 }
 
+void closeSocket(int s){
+	printf("Closing the socket\n");
+    close(s);
+    return;
+}
 
+void transfer(int socket, int threadNum){
+	char* buffer[CHUNK_SIZE];
+	unsigned short chunkNumber;
+	int bytesRead;
+	while((bytesRead = readChunk(buffer, &chunkNumber, threadNum)) > 0){
+		reliablyTransfer(socket, buffer, bytesRead);
+	}
+}
 
 /*
  * 
@@ -286,16 +293,25 @@ int main(int argc, char** argv) {
     unsigned short int udpPort;
     unsigned long long int numBytes;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s receiver_hostname receiver_port );
+    if (argc != 5) {
+        fprintf(stderr, "usage: %s receiver_ip1 receiver_ip2 port file" );
         exit(1);
     }
-    udpPort = (unsigned short int) atoi(argv[2]);
-    numBytes = atoll(argv[4]);
+    udpPort = (unsigned short int) atoi(argv[3]);
 
-	char buffer[] = "This is a test data\n";
-	cout << buffer << endl;
-    reliablyTransfer(argv[1], udpPort, buffer, sizeof(buffer));
+	int socket1 = createSocket(argv[1], udpPort);
+	int socket2 = createSocket(argv[2], udpPort+1);
+
+	int totalChunks = initFileRead(argv[4], 1400, HALF_HALF);
+
+	std::thread thread1(transfer, socket1); 
+    std::thread thread2(transfer, socket2);
+
+	closeFile();
+
+	// char buffer[] = "This is a test data\n";
+	// cout << buffer << endl;
+    // reliablyTransfer(argv[1], udpPort, buffer, sizeof(buffer));
 
 
     return (EXIT_SUCCESS);

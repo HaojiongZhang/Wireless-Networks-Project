@@ -1,20 +1,34 @@
-#include <fileIO.h>
+#include "fileIO.h"
 #include <stdio.h>
 #include <sys/stat.h>
+#include <cstring>
 
-bool isReadingBothEnds;
-int fd;
+#define NUMTHREADS 2
+
+
+typedef struct{
+    int chunkIdx[NUMTHREADS];
+    int partitionStartChunk[NUMTHREADS];
+}threadSpecficCtrl_t;
+
+FILE* fp;
 int chunkSize;
 int totalChunks;
-int chunkIdx_t0, chunkIdx_t1;
+partition_t partitionType;
+
+static int currentChunk = 0;
+threadSpecficCtrl_t threadCtrl;
 
 
-int readSequentialChunk(int8_t* buf);
 
-// Init fileIO and return total number of chunks in a file
-int initFileRead(char* path, size_t bytesPerChunk, bool twoEnds){
-    fd = open(path, O_RDONLY);
-    if (fd == -1){
+int readAltChunk(char* buf, int* chunkNumPtr, int partition);
+int readSequentialChunk(char* buf, int* chunkNumPtr);
+
+
+// Init fileIO and return total number of chunks of the file
+int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype){
+    fp = fopen(path, "r");
+    if (fp == NULL){
         printf("File does not exist");
         return -1;
     }
@@ -22,48 +36,131 @@ int initFileRead(char* path, size_t bytesPerChunk, bool twoEnds){
     struct stat st;
     stat(path, &st);
     int fileSize = st.st_size;
+
     chunkSize = bytesPerChunk;
     totalChunks = (fileSize + chunkSize - 1)/ bytesPerChunk;
-    isReadingBothEnds = twoEnds;
-    chunkIdx_t0 = 0;
-    chunkIdx_t1 = isReadingBothEnds ? totalChunks - 1 : 1;
+    printf("file size:%d, totalChunks:%d \n",fileSize, totalChunks);
+
+    partitionType = partitiontype;
+    switch (partitiontype){
+    case ALTERNATE:
+    case CONSECUTIVE:
+        chunkIdx[0] = 0;
+        chunkIdx[1] = 1;
+        break;
+    case TWOENDS:
+        chunkIdx[0] = 0;
+        chunkIdx[1] = totalChunks-1;
+    default:
+        break;
+    }
 
     return totalChunks;
 }
 
-// Read chunk into buf and return the index of the chunk
-// Return 0 when error occurs
-// Return negative index when this is the last chunk to read
-int readChunk_t0(int8_t* buf){
-    if (isReadingBothEnds){
-        return readSequentialChunk();
+// get next chunk in the buf, get chunk index in *chunkNumPtr
+// returns the number of bytes read
+int readChunk(char* buf, int* chunkNumPtr, int partition){
+    switch (partitionType){
+    case ALTERNATE:
+        return readAltChunk(buf, chunkNumPtr, partition);
+    case CONSECUTIVE:
+        (void) partition;
+        return readSequentialChunk(buf, chunkNumPtr);
+    case TWOENDS:
+        return readEndsChunk(buf, chunkNumPtr);
     }
-    else {
-        
-    }
+
+    (void)partition;
+    return 0;
 }
 
-int readChunk_t1(int8_t* buf){
-    if (isReadingBothEnds){
-        return readSequentialChunk();
-    }
-    else {
+int readAltChunk(char* buf, int* chunkNumBuf, int partition){
+    int *chunk, finalChunk;
+    chunk = threadCtrl.chunkIdx + partition;
+    finalChunk = totalChunks - NUMTHREADS + partition;
 
-    }
-}
-
-int readSequentialChunk(int8_t* buf){
-    static int currentChunk = 0;
-    memset(buf, 0, chunkSize);
-
-    int bytesRead = read(fd, buf, chunkSize);
-    if (bytesRead < 0){
-        printf("Chunk read error");
+    /* Check if already completed reading */
+    if (*chunk == finalChunk){
+        *chunkNumBuf = *chunk;
         return 0;
     }
-    else if (bytesRead < chunkSize){
-        return 0 - currentChunk;
+
+    memset(buf, 0, chunkSize);
+    fseek(fp, (*chunk)*chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp);
+
+    if (bytesRead <= 0){
+        printf("Chunk read error \n");
+        return -1;
     }
+    *chunkNumBuf = *chunk;
+    *chunk += 2;
+    return bytesRead;
+}
+
+// Read the next sequential chunk from the file
+int readSequentialChunk(char* buf, int* chunkNumPtr){
+    /* Check if already completed reading */
+    if (currentChunk == totalChunks){
+        *chunkNumPtr = currentChunk;
+        return 0;
+    }
+
+    memset(buf, 0, chunkSize);
+    int bytesRead = fread(buf, 1, chunkSize, fp);
+
+    if (bytesRead <= 0){
+        printf("Chunk read error \n");
+        return -1;
+    }
+    *chunkNumPtr = currentChunk;
     currentChunk++;
-    return currentChunk;
+    return bytesRead;
+}
+
+int readEndsChunk(char* buf, int* chunkNumPtr){
+    /* Check if already completed reading */
+    if (threadCtrl.chunkIdx[0] == threadCtrl.chunkIdx[1]){
+        *chunkNumPtr = threadCtrl.chunkIdx[0];
+        return 0;
+    }
+
+    int *chunk, finalChunk;
+    chunk = threadCtrl.chunkIdx + partition;
+
+    memset(buf, 0, chunkSize);
+    fseek(fp, (*chunk) * chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp);
+
+    if (bytesRead <= 0){
+        printf("Chunk read error \n");
+        return -1;
+    }
+    *chunkNumPtr = currentChunk;
+    (*chunk)--;
+    return bytesRead;
+}
+
+bool hasMoreChunks(int thread){
+    switch (partitionType){
+    case CONSECUTIVE:
+        return currentChunk != totalChunks;
+    case ALTERNATE:
+        if (thread == 0){
+            return chunkIdx_t0 != partitionStartChunk;
+        }
+        else {
+            return chunkIdx_t1 != totalChunks;
+        }
+    case TWOENDS:
+        return false;
+    }
+    
+    return false;
+}
+
+
+void closeFile(){
+    fclose(fp);
 }
