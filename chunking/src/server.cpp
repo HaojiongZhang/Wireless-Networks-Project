@@ -44,14 +44,28 @@ int createSocketAndConnect(int port, const char* serverIP, const char* interface
     return sockfd;
 }
 
-void sendChunk(int socket, int threadNum) {
-    
-    Packet packet;
-    uint32_t currentChunk = 0;
-    while (hasMoreChunks(threadNum)){
-        int bytes = readChunk(packet.data, &(packet.chunkNumber), threadNum);
-        if (bytes > 0){
-            send(socket, &packet, sizeof(packet), 0);
+void sendChunk(const char* filename, int startChunk, int socket, int totalChunks) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file" << std::endl;
+        exit(1);
+    }
+
+    int chunkNumber = startChunk;
+    while (chunkNumber < totalChunks) {
+        Packet packet;
+        packet.chunkNumber = chunkNumber;
+
+        file.seekg(chunkNumber * CHUNK_SIZE, std::ios::beg);
+        file.read(packet.data, CHUNK_SIZE);
+        std::streamsize bytes = file.gcount();
+
+        if (bytes > 0) {
+            char tmpBuffer[sizeof(packet)];
+            
+            memcpy(tmpBuffer, &packet, sizeof(packet));
+            
+            send(socket, tmpBuffer, sizeof(tmpBuffer), 0);
         }
     }
 }
