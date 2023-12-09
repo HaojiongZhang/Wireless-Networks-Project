@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
     unsigned long long int numBytes;
 
     if (argc != 3) {
-        fprintf(stderr, "usage: %s receiver_hostname receiver_port );
+        fprintf(stderr, "usage: %s receiver_hostname receiver_port");
         exit(1);
     }
     udpPort = (unsigned short int) atoi(argv[2]);

@@ -57,17 +57,32 @@ int acceptConnection(int sockfd) {
     return newsockfd;
 }
 
-void receiveData(int socket, std::ofstream& file, int& nextChunk) {
+
+void receiveData(int socket) {
     while (true) {
         Packet packet;
         ssize_t n = recv(socket, &packet, sizeof(packet), 0);
-        if (n <= 0) break;
+        if (n <= 0) {
+            std::lock_guard<std::mutex> lock(chunkMapMutex);
+            finishedReceiving = true;
+            cv.notify_one();
+            break;
+        }
 
         std::cout << "Received chunk number: " << packet.chunkNumber << std::endl;
-        std::lock_guard<std::mutex> lock(fileMutex);
-        chunkMap[packet.chunkNumber] = std::vector<char>(packet.data, packet.data + n - sizeof(int));
+        {
+            std::lock_guard<std::mutex> lock(chunkMapMutex);
+            chunkMap[packet.chunkNumber] = std::vector<char>(packet.data, packet.data + n - sizeof(int));
+        }
+        cv.notify_one();
+    }
+}
 
-        // Write chunks in order if available
+void writeData(std::ofstream& file, int& nextChunk) {
+    std::unique_lock<std::mutex> lock(chunkMapMutex);
+    while (!finishedReceiving || !chunkMap.empty()) {
+        cv.wait(lock, [&]() { return finishedReceiving || !chunkMap.empty(); });
+
         auto it = chunkMap.find(nextChunk);
         while (it != chunkMap.end()) {
             std::cout << "Writing chunk number: " << it->first << std::endl;
@@ -78,7 +93,6 @@ void receiveData(int socket, std::ofstream& file, int& nextChunk) {
         }
     }
 }
-
 int main(int argc, char** argv) {
     if (argc != 3) {
         std::cerr << "Usage: " << argv[0] << " <port> <destination file>" << std::endl;
@@ -100,11 +114,13 @@ int main(int argc, char** argv) {
     int newSocket2 = acceptConnection(socket2);
 
     int nextChunk = 0;
-    std::thread thread1(receiveData, newSocket1, std::ref(file), std::ref(nextChunk));
-    std::thread thread2(receiveData, newSocket2, std::ref(file), std::ref(nextChunk));
+    std::thread thread1(receiveData, newSocket1);
+    std::thread thread2(receiveData, newSocket2);
+    std::thread writerThread(writeData, std::ref(file), std::ref(nextChunk));
 
     thread1.join();
     thread2.join();
+    writerThread.join();
 
     close(newSocket1);
     close(newSocket2);
