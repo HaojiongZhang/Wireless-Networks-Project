@@ -286,8 +286,8 @@ int main(int argc, char** argv) {
     unsigned short int udpPort;
     unsigned long long int numBytes;
 
-    if (argc != 5) {
-        fprintf(stderr, "usage: %s receiver_hostname receiver_port filename_to_xfer bytes_to_xfer\n\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s receiver_hostname receiver_port );
         exit(1);
     }
     udpPort = (unsigned short int) atoi(argv[2]);
