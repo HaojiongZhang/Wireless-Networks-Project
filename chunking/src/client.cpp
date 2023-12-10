@@ -78,18 +78,23 @@ void receiveData(int socket, std::ofstream& file, int& nextChunk) {
         if (n <= 0) break;
 
         std::cout << "Received chunk number: " << packet.chunkNumber << std::endl;
-        std::lock_guard<std::mutex> lock(fileMutex);
-        chunkMap[packet.chunkNumber] = std::vector<char>(packet.data, packet.data + n - sizeof(int));
+
+        storeData(packet.data, packet.chunkNumber);
+
+
+       
+        // std::lock_guard<std::mutex> lock(fileMutex);
+        // chunkMap[packet.chunkNumber] = std::vector<char>(packet.data, packet.data + n - sizeof(int));
 
         // Write chunks in order if available
-        auto it = chunkMap.find(nextChunk);
-        while (it != chunkMap.end()) {
-            std::cout << "Writing chunk number: " << it->first << std::endl;
-            file.write(it->second.data(), it->second.size());
-            chunkMap.erase(it);
-            nextChunk++;
-            it = chunkMap.find(nextChunk);
-        }
+        // auto it = chunkMap.find(nextChunk);
+        // while (it != chunkMap.end()) {
+        //     std::cout << "Writing chunk number: " << it->first << std::endl;
+        //     file.write(it->second.data(), it->second.size());
+        //     chunkMap.erase(it);
+        //     nextChunk++;
+        //     it = chunkMap.find(nextChunk);
+        // }
     }
 }
 
@@ -100,12 +105,13 @@ int main(int argc, char** argv) {
     }
 
     int port = std::stoi(argv[1]);
-    const char* destinationFile = argv[2];
+    char* destinationFile = argv[2];
     std::ofstream file(destinationFile, std::ios::binary);
     if (!file.is_open()) {
         std::cerr << "Error opening file" << std::endl;
         return 1;
     }
+    initFileWrite(destinationFile, 1024, CONSECUTIVE);
 
     const char* interfaceName1 = "wlan0";
     const char* interfaceName2 = "wlan0";
@@ -119,7 +125,7 @@ int main(int argc, char** argv) {
     int nextChunk = 0;
     std::thread thread1(receiveData, newSocket1, std::ref(file), std::ref(nextChunk));
     std::thread thread2(receiveData, newSocket2, std::ref(file), std::ref(nextChunk));
-
+    std::thread thread3(writeToFile);
     thread1.join();
     thread2.join();
 
@@ -127,5 +133,6 @@ int main(int argc, char** argv) {
     close(newSocket2);
     file.close();
 
+    closeFile();
     return 0;
 }

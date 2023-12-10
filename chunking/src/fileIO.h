@@ -16,10 +16,12 @@ int initFileRead(const char* path, int bytesPerChunk, partition_t partition);
 int readChunk(char* buf, int* chunkNumPtr, int thread);
 bool hasMoreChunks(int thread);
 
+void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition);
+bool storeData(char* content, int chunkNumber);
+void writeToFile();
 void closeFile();
 
 
 
 
 #endif
-

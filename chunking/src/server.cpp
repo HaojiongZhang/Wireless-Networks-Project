@@ -44,21 +44,14 @@ int createSocketAndConnect(int port, const char* serverIP, const char* interface
     return sockfd;
 }
 
-void sendChunk(const char* filename, int startChunk, int socket, int totalChunks) {
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file" << std::endl;
-        exit(1);
-    }
+void sendChunk(int socket, int threadNum) {
 
-    int chunkNumber = startChunk;
-    while (chunkNumber < totalChunks) {
+    while (hasMoreChunks(threadNum)) {
+
         Packet packet;
-        packet.chunkNumber = chunkNumber;
 
-        file.seekg(chunkNumber * CHUNK_SIZE, std::ios::beg);
-        file.read(packet.data, CHUNK_SIZE);
-        std::streamsize bytes = file.gcount();
+        int bytes = readChunk(packet.data, &packet.chunkNumber, threadNum);
+      
 
         if (bytes > 0) {
             char tmpBuffer[sizeof(packet)];
@@ -80,8 +73,11 @@ int main(int argc, char** argv) {
     const char* espIP = argv[3];
     int port = std::stoi(argv[4]);
 
+
+    initFileRead(filename, 1024, CONSECUTIVE);
+
     // Set partition type to initialize file chunking
-    int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);
+    //int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);
 
     const char* interfaceName1 = "wlan0";
     const char* interfaceName2 = "espst0";
@@ -102,5 +98,6 @@ int main(int argc, char** argv) {
     close(socket1);
     close(socket2);
 
+    closeFile();
     return 0;
 }
