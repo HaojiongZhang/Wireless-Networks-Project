@@ -19,19 +19,19 @@ typedef struct{
 
 typedef struct{
     int startChunkNum;
-    int consec;
     int count;
     char* buf;
     bool* occupied;
+    char irregularBuf[1024];
+    int irregularSize;
     volatile bool mutex;
 }recv_buf_t;
 
-FILE* fp;
+FILE *fp_tx, *fp_rx;
 int chunkSize;
 int totalChunks;
 partition_t partitionMethod;
 const int recv_buf_size = 64;
-volatile bool start = false;
 volatile bool end = false;
 
 static int currentChunk = 0;
@@ -43,13 +43,13 @@ recv_buf_t recv_buf;
 int readAltChunk(char* buf, int* chunkNumPtr, int partition);
 int readSequentialChunk(char* buf, int* chunkNumPtr);
 int readEndsChunk(char* buf, int* chunkNumPtr, int partition);
-bool InOrderStore(char* content, int chunkNumber);
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived);
 
 
 // Init fileIO and return total number of chunks of the file
 int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype){
-    fp = fopen(path, "r");
-    if (fp == NULL){
+    fp_tx = fopen(path, "r");
+    if (fp_tx == NULL){
         printf("File does not exist");
         return -1;
     }
@@ -109,8 +109,8 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
 
     memset(buf, 0, chunkSize);
     pthread_mutex_lock(&mutex);
-    fseek(fp, (*chunk)*chunkSize, SEEK_SET);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    fseek(fp_tx, (*chunk)*chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
     pthread_mutex_unlock(&mutex);
 
     if (bytesRead <= 0){
@@ -132,7 +132,7 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
     }
 
     memset(buf, 0, chunkSize);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
     if (bytesRead < 0){
         printf("chunk read error");
         return -1;
@@ -156,8 +156,8 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
 
     memset(buf, 0, chunkSize);
     pthread_mutex_lock(&mutex);
-    fseek(fp, (*chunk) * chunkSize, SEEK_SET);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    fseek(fp_tx, (*chunk) * chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
     pthread_mutex_unlock(&mutex);
 
     if (bytesRead <= 0){
@@ -196,17 +196,16 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
     recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
     recv_buf.occupied = (bool*)malloc(sizeof(bool) * recv_buf_size);
     recv_buf.startChunkNum = 0;
-    recv_buf.consec = 0;
     recv_buf.count = 0;
     recv_buf.mutex = false;
-    fp = fopen(writeFile, "w");
+    fp_rx = fopen(writeFile, "w");
 }
 
-bool storeData(char* content, int chunkNumber){
+bool storeData(char* content, int chunkNumber, int bytesReceived){
     switch (partitionMethod){
         case ALTERNATE:
         case CONSECUTIVE:
-            return InOrderStore(content, chunkNumber);
+            return InOrderStore(content, chunkNumber, bytesReceived);
             break;
         default:
             return false;
@@ -214,17 +213,22 @@ bool storeData(char* content, int chunkNumber){
     }
 }
 
-bool InOrderStore(char* content, int chunkNumber){
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
     int idx = chunkNumber - recv_buf.startChunkNum;
     if (idx < recv_buf_size){
         while (recv_buf.mutex){        }
         recv_buf.mutex = true;
-        memcpy(&recv_buf.buf[idx], content, chunkSize);
-        start = true;
-        printf("buffer head: %d. ", recv_buf.startChunkNum);
-        // printf("storing chunk: %d, in idx: %d \n", chunkNumber, idx);
-        recv_buf.occupied[idx] = true;
-        recv_buf.count++;
+        if (bytesReceived != chunkSize){
+            memcpy(&recv_buf.irregularBuf[idx], content, bytesReceived);
+            recv_buf.irregularSize = bytesReceived;
+        }
+        else {
+            memcpy(&recv_buf.buf[idx], content, chunkSize);
+            printf("buffer head: %d. ", recv_buf.startChunkNum);
+            // printf("storing chunk: %d, in idx: %d \n", chunkNumber, idx);
+            recv_buf.occupied[idx] = true;
+            recv_buf.count++;
+        }
         recv_buf.mutex = false;
         return true;
     }
@@ -235,39 +239,38 @@ bool InOrderStore(char* content, int chunkNumber){
 
 void writeToFile(){
     while (true){
-        
-        
         int count = 0;
         while (count < recv_buf_size){
             if (recv_buf.occupied[count]){
                 count++;
-                recv_buf.consec = count;
-                printf("%d", count);
+                
             }
             else{
                 break;
             }
         }
+        
+
         if (count != 0){
             while(recv_buf.mutex){        }
             recv_buf.mutex = true;
             printf("writing to %d. ", count+recv_buf.startChunkNum);
-            fwrite(recv_buf.buf, 1024, count, fp);
+            fwrite(recv_buf.buf, 1024, count, fp_rx);
             memmove(recv_buf.buf, &recv_buf.buf[count], (recv_buf_size - count) * 1024);
             memmove(recv_buf.occupied, &recv_buf.occupied[count], sizeof(bool)*(recv_buf_size - count));
             memset(&recv_buf.occupied[recv_buf_size - count], 0, sizeof(bool)*count);
             recv_buf.count -= count;
             recv_buf.startChunkNum += count;
             recv_buf.mutex = false;
-            
         }
 
         if (end && recv_buf.count == 0){
+            fwrite(recv_buf.irregularBuf, recv_buf.irregularSize, 1, fp_rx);
             return;
         }
     }
 }
 
 void closeFile(){
-    fclose(fp);
+    fclose(fp_tx);
 }

@@ -21,7 +21,7 @@ typedef struct{
     bool mutex;
 }recv_buf_t;
 
-FILE* fp;
+FILE* fp_tx;
 int chunkSize;
 int totalChunks;
 partition_t partitionMethod;
@@ -38,8 +38,8 @@ int readSequentialChunk(char* buf, int* chunkNumPtr);
 
 // Init fileIO and return total number of chunks of the file
 int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype){
-    fp = fopen(path, "r");
-    if (fp == NULL){
+    fp_tx = fopen(path, "r");
+    if (fp_tx == NULL){
         printf("File does not exist");
         return -1;
     }
@@ -98,8 +98,8 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
     }
 
     memset(buf, 0, chunkSize);
-    fseek(fp, (*chunk)*chunkSize, SEEK_SET);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    fseek(fp_tx, (*chunk)*chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -119,7 +119,7 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
     }
 
     memset(buf, 0, chunkSize);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -141,8 +141,8 @@ int readEndsChunk(char* buf, int* chunkNumPtr){
     chunk = threadCtrl.chunkIdx + partition;
 
     memset(buf, 0, chunkSize);
-    fseek(fp, (*chunk) * chunkSize, SEEK_SET);
-    int bytesRead = fread(buf, 1, chunkSize, fp);
+    fseek(fp_tx, (*chunk) * chunkSize, SEEK_SET);
+    int bytesRead = fread(buf, 1, chunkSize, fp_tx);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -233,5 +233,5 @@ void writeToFile(){
 }
 
 void closeFile(){
-    fclose(fp);
+    fclose(fp_tx);
 }

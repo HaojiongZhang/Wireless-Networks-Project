@@ -79,7 +79,7 @@ void receiveData(int socket, std::ofstream& file, int& nextChunk) {
 
         std::cout << "Received chunk number: " << packet.chunkNumber << std::endl;
         // std::cout << "Received chunk number: " << packet.data << std::endl;
-        storeData(packet.data, packet.chunkNumber);
+        storeData(packet.data, packet.chunkNumber, (int)n);
 
 
        
