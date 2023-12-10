@@ -78,7 +78,7 @@ void receiveData(int socket, std::ofstream& file, int& nextChunk) {
         if (n <= 0) break;
 
         std::cout << "Received chunk number: " << packet.chunkNumber << std::endl;
-
+        // std::cout << "Received chunk number: " << packet.data << std::endl;
         storeData(packet.data, packet.chunkNumber);
 
 
@@ -128,6 +128,9 @@ int main(int argc, char** argv) {
     std::thread thread3(writeToFile);
     thread1.join();
     thread2.join();
+
+    end = true;    
+    thread3.join();
 
     close(newSocket1);
     close(newSocket2);

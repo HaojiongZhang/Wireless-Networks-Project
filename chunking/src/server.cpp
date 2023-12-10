@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     //int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);
 
     const char* interfaceName1 = "wlan0";
-    const char* interfaceName2 = "espst0";
+    const char* interfaceName2 = "wlan0";
 
     // Create two sockets for two threads
     int socket1 = createSocketAndConnect(port, serverIP, interfaceName1);

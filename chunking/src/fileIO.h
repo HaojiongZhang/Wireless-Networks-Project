@@ -9,7 +9,7 @@ enum partition_t{
     TWOENDS
 };
 
-
+extern volatile bool end;
 // Return total number of chunks that the file has
 int initFileRead(const char* path, int bytesPerChunk, partition_t partition);
 // get next chunk in the buf, get chunk index in *chunkNumPtr
@@ -19,9 +19,11 @@ bool hasMoreChunks(int thread);
 void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition);
 bool storeData(char* content, int chunkNumber);
 void writeToFile();
+
 void closeFile();
 
 
 
 
 #endif
+
