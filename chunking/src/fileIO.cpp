@@ -31,7 +31,7 @@ FILE *fp_tx, *fp_rx;
 int chunkSize;
 int totalChunks;
 partition_t partitionMethod;
-const int recv_buf_size = 64;
+const int recv_buf_size = 512;
 volatile bool end = false;
 
 static int currentChunk = 0;
@@ -102,7 +102,7 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
     finalChunk = totalChunks - NUMTHREADS + partition;
 
     /* Check if already completed reading */
-    if (*chunk == finalChunk){
+    if (*chunk > finalChunk){
         *chunkNumBuf = *chunk;
         return 0;
     }
@@ -178,7 +178,7 @@ bool hasMoreChunks(int thread){
     case CONSECUTIVE:
         return currentChunk < totalChunks;
     case ALTERNATE:
-        return threadCtrl.chunkIdx[thread] != (totalChunks - NUMTHREADS + thread);
+        return threadCtrl.chunkIdx[thread] <= (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
         return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
     }
@@ -198,7 +198,7 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
     chunkSize = bytesPerChunk;
 
     recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
-    recv_buf.occupied = (bool*)malloc(sizeof(bool) * recv_buf_size);
+    recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
     recv_buf.startChunkNum = 0;
     recv_buf.count = 0;
     fp_rx = fopen(writeFile, "w");
@@ -222,13 +222,13 @@ bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
     int idx = chunkNumber - recv_buf.startChunkNum;
     if (idx < recv_buf_size){
         if (bytesReceived != chunkSize){
-            memcpy(&recv_buf.irregularBuf[idx], content, bytesReceived);
+            memcpy(recv_buf.irregularBuf, content, bytesReceived);
             recv_buf.irregularSize = bytesReceived;
         }
         else {
-            memcpy(&recv_buf.buf[idx], content, chunkSize);
-            printf("buffer head: %d. ", recv_buf.startChunkNum);
+            memcpy(&recv_buf.buf[idx * chunkSize], content, chunkSize);
             recv_buf.occupied[idx] = true;
+            printf("buffer head: %d. occupacy: %d%d%d%d\n", recv_buf.startChunkNum, recv_buf.occupied[0],recv_buf.occupied[1], recv_buf.occupied[2], recv_buf.occupied[3]);
             recv_buf.count++;
         }
         pthread_mutex_unlock(&(recv_buf.mutex));
@@ -256,8 +256,8 @@ void writeToFile(){
             fwrite(recv_buf.buf, chunkSize, count, fp_rx);
 
             memmove(recv_buf.buf, &recv_buf.buf[(count)*chunkSize], (recv_buf_size - count) * chunkSize);
-            memmove(recv_buf.occupied, &recv_buf.buf[count], (recv_buf_size - count) * sizeof(bool));
-            memset(&recv_buf.occupied[count], 0, count*sizeof(bool));
+            memmove(recv_buf.occupied, &recv_buf.occupied[count], (recv_buf_size - count) * sizeof(bool));
+            memset(&recv_buf.occupied[recv_buf_size - count], 0, count*sizeof(bool));
             recv_buf.count -= count;
             recv_buf.startChunkNum += count;
         }
