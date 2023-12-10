@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 enum partition_t{
-    HALF_HALF,
+    ALTERNATE,
     CONSECUTIVE,
     TWOENDS
 };

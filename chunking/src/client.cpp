@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
     }
 
     const char* interfaceName1 = "wlan0";
-    const char* interfaceName2 = "espst0";
+    const char* interfaceName2 = "wlan0";
 
     int socket1 = createSocketAndBind(port, interfaceName1);
     int socket2 = createSocketAndBind(port + 1, interfaceName2);

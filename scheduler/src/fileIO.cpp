@@ -9,16 +9,27 @@
 typedef struct{
     int chunkIdx[NUMTHREADS];
     int partitionStartChunk[NUMTHREADS];
+    FILE fp_rx_thread[NUMTHREADS];
 }threadSpecficCtrl_t;
+
+typedef struct{
+    int startChunkNum;
+    int nextEmpty;
+    int consec;
+    char* buf;
+    bool* occupied;
+    bool mutex;
+}recv_buf_t;
 
 FILE* fp;
 int chunkSize;
 int totalChunks;
-partition_t partitionType;
+partition_t partitionMethod;
+const int recv_buf_size = 64;
 
 static int currentChunk = 0;
-threadSpecficCtrl_t threadCtrl;
-
+threadSpecficCtrl_t threadCtrl; 
+recv_buf_t recv_buf;
 
 
 int readAltChunk(char* buf, int* chunkNumPtr, int partition);
@@ -41,7 +52,7 @@ int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype)
     totalChunks = (fileSize + chunkSize - 1)/ bytesPerChunk;
     printf("file size:%d, totalChunks:%d \n",fileSize, totalChunks);
 
-    partitionType = partitiontype;
+    partitionMethod = partitiontype;
     switch (partitiontype){
     case ALTERNATE:
     case CONSECUTIVE:
@@ -61,7 +72,7 @@ int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype)
 // get next chunk in the buf, get chunk index in *chunkNumPtr
 // returns the number of bytes read
 int readChunk(char* buf, int* chunkNumPtr, int partition){
-    switch (partitionType){
+    switch (partitionMethod){
     case ALTERNATE:
         return readAltChunk(buf, chunkNumPtr, partition);
     case CONSECUTIVE:
@@ -143,7 +154,7 @@ int readEndsChunk(char* buf, int* chunkNumPtr){
 }
 
 bool hasMoreChunks(int thread){
-    switch (partitionType){
+    switch (partitionMethod){
     case CONSECUTIVE:
         return currentChunk != totalChunks;
     case ALTERNATE:
@@ -160,6 +171,66 @@ bool hasMoreChunks(int thread){
     return false;
 }
 
+
+void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
+    int t;
+    for (t = 0; t < NUMTHREADS; t++){
+        char filename[5];
+        sprintf(filename, "%d", t);
+        threadCtrl.fp_rx_thread[t] = fopen(filename, "w");
+    }
+    partitionMethod = partition;
+    chunkSize = bytesPerChunk;
+
+    recv_buf.storeBuf = malloc(bytesPerChunk * recv_buf_size);
+    recv_buf.occupied = malloc(sizeof(bool) * recv_buf_size);
+    recv_buf.startChunkNum = 0;
+    recv_buf.consec = 0;
+    recv_buf.nextEmpty = 0;
+}
+
+void storeData(char* content, int chunkNumber){
+    switch (partitionMethod){
+        case ALTERNATE:
+        case CONSECUTIVE:
+            InOrderStore(content, chunkNumber);
+            break;
+        default:
+            break;
+    }
+}
+
+bool InOrderStore(char* content, int chunkNumber){
+    int idx = chunkNumber - recv_buf.startChunkNum;
+    if (chunkNumber - recv_buf.startChunkNum < recv_buf_size){
+        while (recv_buf.mutex){
+            recv_buf.mutex = true;
+            memcpy(&recv_buf.buf[idx], content, chunkSize);
+            recv_buf.occupied[idx] = true;
+            recv_buf.mutex = false;
+        }
+        return true;
+    }
+    else{
+        return false;
+    }
+}
+
+void writeToFile(){
+    while(recv_buf.mutex){
+        recv_buf.mutex = true;
+        int idx = 0;
+        while (idx < recv_buf_size){
+            if (recv_buf.occupied[idx]){
+                idx++;
+                recv_buf.consec = idx;
+            }
+        }
+        memmove(recv_buf.buf, recv_buf.buf[recv_buf.consec], recv_buf_size - recv_buf.consec);
+        recv_buf.consec = 0;
+        recv_buf.mutex = false;
+    }
+}
 
 void closeFile(){
     fclose(fp);
