@@ -128,6 +128,23 @@ void reliablyTransfer(int s, int threadNum) {
 	bool immFIN = false;
 	if (!hasMoreChunks(threadNum)){
 		immFIN = true;
+		
+		for(int i = 0; i < 10; i++){
+			cout << "sending FIN from thread " << threadNum << endl;
+			pkt fin_pkt;
+			fin_pkt.seq_num = -1;
+			fin_pkt.ack_num = -1;
+			fin_pkt.RSF = FIN;
+			memcpy(snd_buffer, &fin_pkt, sizeof(pkt));
+			if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){   //sendto ??????
+				cout << "Failed to send FIN " << endl;
+					exit(1);
+			}
+
+		}
+		
+
+	
 	}
     while(TRUE){
     		pktToSend = cwnd - (int)NotYetACK.size();
