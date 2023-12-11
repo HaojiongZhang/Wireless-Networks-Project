@@ -108,8 +108,10 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
     }
 
     memset(buf, 0, chunkSize);
+    pthread_mutex_lock(&mutex);
     fseek(fp, (*chunk)*chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp);
+    pthread_mutex_unlock(&mutex);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -124,7 +126,7 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
 int readSequentialChunk(char* buf, int* chunkNumPtr){
     pthread_mutex_lock(&mutex);
     /* Check if already completed reading */
-    if (currentChunk == totalChunks-1){
+    if (currentChunk == totalChunks){
         *chunkNumPtr = currentChunk;
         return 0;
     }
@@ -135,8 +137,8 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
         printf("chunk read error");
         return -1;
     }
-    currentChunk++;
     *chunkNumPtr = currentChunk;
+    currentChunk++;
     pthread_mutex_unlock(&mutex);
     
     return bytesRead;
@@ -153,8 +155,10 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
     chunk = threadCtrl.chunkIdx + partition;
 
     memset(buf, 0, chunkSize);
+    pthread_mutex_lock(&mutex);
     fseek(fp, (*chunk) * chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp);
+    pthread_mutex_unlock(&mutex);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -168,11 +172,11 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
 bool hasMoreChunks(int thread){
     switch (partitionMethod){
     case CONSECUTIVE:
-        return currentChunk < totalChunks - 1;
+        return currentChunk < totalChunks;
     case ALTERNATE:
-        return false;
+        return threadCtrl.chunkIdx[thread] == (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
-        return false;
+        return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
     }
     
     return false;
@@ -191,7 +195,7 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
 
     recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
     recv_buf.occupied = (bool*)malloc(sizeof(bool) * recv_buf_size);
-    recv_buf.startChunkNum = 1;
+    recv_buf.startChunkNum = 0;
     recv_buf.consec = 0;
     recv_buf.count = 0;
     recv_buf.mutex = false;
