@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     int port = std::stoi(argv[4]);
 
 
-    initFileRead(filename, 1024, CONSECUTIVE);
+    initFileRead(filename, 1024, ALTERNATE);
 
     // Set partition type to initialize file chunking
     //int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);

@@ -21,7 +21,7 @@ bool storeData(char* content, int chunkNumber, int bytesReceived);
 void writeToFile();
 
 void closeFile();
-
+void closeWriteFile();
 
 
 

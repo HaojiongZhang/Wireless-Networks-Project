@@ -71,17 +71,16 @@ int acceptConnection(int sockfd) {
     return newsockfd;
 }
 
-void receiveData(int socket, std::ofstream& file, int& nextChunk) {
+void receiveData(int socket) {
     while (true) {
         Packet packet;
         ssize_t n = recv(socket, &packet, sizeof(packet), 0);
         if (n <= 0) break;
-
         std::cout << "Received chunk number: " << packet.chunkNumber << std::endl;
         // std::cout << "Received chunk number: " << packet.data << std::endl;
-        storeData(packet.data, packet.chunkNumber, (int)n);
+        storeData(packet.data, packet.chunkNumber, n - sizeof(int));
 
-
+        
        
         // std::lock_guard<std::mutex> lock(fileMutex);
         // chunkMap[packet.chunkNumber] = std::vector<char>(packet.data, packet.data + n - sizeof(int));
@@ -106,12 +105,8 @@ int main(int argc, char** argv) {
 
     int port = std::stoi(argv[1]);
     char* destinationFile = argv[2];
-    std::ofstream file(destinationFile, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file" << std::endl;
-        return 1;
-    }
-    initFileWrite(destinationFile, 1024, CONSECUTIVE);
+ 
+    initFileWrite(destinationFile, 1024, ALTERNATE);
 
     const char* interfaceName1 = "wlan0";
     const char* interfaceName2 = "wlan0";
@@ -123,8 +118,8 @@ int main(int argc, char** argv) {
     int newSocket2 = acceptConnection(socket2);
 
     int nextChunk = 0;
-    std::thread thread1(receiveData, newSocket1, std::ref(file), std::ref(nextChunk));
-    std::thread thread2(receiveData, newSocket2, std::ref(file), std::ref(nextChunk));
+    std::thread thread1(receiveData, newSocket1);
+    std::thread thread2(receiveData, newSocket2);
     std::thread thread3(writeToFile);
     thread1.join();
     thread2.join();
@@ -134,8 +129,7 @@ int main(int argc, char** argv) {
 
     close(newSocket1);
     close(newSocket2);
-    file.close();
 
-    closeFile();
+    closeWriteFile();
     return 0;
 }
