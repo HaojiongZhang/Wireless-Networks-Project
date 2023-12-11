@@ -47,6 +47,7 @@ typedef struct{
   int seq_num;
   int ack_num;
   int RSF;
+  int chunk_num;
   int datalen;
   char data[PKT_SIZE];
 }pkt;
@@ -160,14 +161,13 @@ void reliablyTransfer(int s, int threadNum) {
 			   if (hasMoreChunks(threadNum)){
 				
 				pkt tmp;
-    			int bytesRead = readChunk(tmp.data, &tmp.seq_num, threadNum);
+    			int bytesRead = readChunk(tmp.data, &tmp.chunk_num, threadNum);
 				cout << tmp.data << endl;
 				
 				
-			
-			
-			  	latestSeqNum = tmp.seq_num;
-			  	
+		
+			  	tmp.seq_num = latestSeqNum;
+			  	latestSeqNum++;
 			  	tmp.ack_num = -1;
 			  	tmp.RSF = DATA;
 			  	tmp.datalen = bytesRead;
@@ -248,7 +248,7 @@ void reliablyTransfer(int s, int threadNum) {
 				cout << lastPKTSent << endl;
 				cout << "Assssssss" << endl;
 
-				if(((ackNum == finalPKTNum+1) && (lastPKTSent))||immFIN){
+				if(((ackNum == finalPKTNum) && (lastPKTSent))||immFIN){
 			    		cout << "sending FIN" << endl;
 			    		pkt fin_pkt;
 			    		fin_pkt.seq_num = -1;

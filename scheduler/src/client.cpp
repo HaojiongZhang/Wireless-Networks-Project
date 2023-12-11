@@ -31,6 +31,7 @@ typedef struct{
   int seq_num;
   int ack_num;
   int RSF;
+  int chunk_num;
   int datalen;
   char data[PKT_SIZE];
 }pkt;
@@ -41,7 +42,7 @@ void diep(char *s) {
 }
 
 
-void reliablyReceive(unsigned short int myUDPport) {
+void reliablyReceive(unsigned short int myUDPport, int threadNum) {
     
     slen = sizeof (si_other);
 
@@ -87,17 +88,24 @@ void reliablyReceive(unsigned short int myUDPport) {
     		ack.RSF = FIN;
     		memcpy(buf,&ack,sizeof(pkt));
     		sendto(s, buf, sizeof(pkt), 0, (struct sockaddr*) &sender_addr, addrlen);
-    		cout << "closed connection" << endl;
+    		cout << "closed connection from " << threadNum << endl;
     		break;
 
     	}else if(pkt_in.RSF == DATA){                   //receive packet
     	   if(pkt_in.seq_num == NextACK){
     	   	memcpy(&buffer[ToBeFilledIdx], &pkt_in, sizeof(pkt));
     	   	// fwrite(&pkt_in.data, sizeof(char), pkt_in.datalen,fp);
-			storeData(pkt_in.data, pkt_in.seq_num, pkt_in.datalen);
+			bool res = storeData(pkt_in.data, pkt_in.chunk_num, pkt_in.datalen);
+			if (res){
+				cout << "aaaaaaaaaaaaa" << endl;
 
-    	   	cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
-    	   	cout << "written " << pkt_in.data << " bytes into file" << endl;
+				cout << "receive pck num: " << pkt_in.seq_num << "on thread " << threadNum << endl;
+				cout << pkt_in.data << endl;
+				cout << "aaaaaaaaaaaaa" << endl;
+			}
+			cout << "receive pck num: " << pkt_in.seq_num << "on thread " << threadNum << endl;
+    	   //	cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
+    	   	//cout << "written " << pkt_in.data << " bytes into file" << endl;
     	   	
     	   	ToBeFilledIdx = (ToBeFilledIdx + 1) % BUFFER_SIZE;
     	   	if (ToBeFilledIdx == 0) buffer_head = buffer[BUFFER_SIZE-1].seq_num;
@@ -174,8 +182,8 @@ int main(int argc, char** argv) {
 
     
 
-	std::thread thread1(reliablyReceive, udpPort);
-    std::thread thread2(reliablyReceive, udpPort+1);
+	std::thread thread1(reliablyReceive, udpPort, 0);
+    std::thread thread2(reliablyReceive, udpPort+1, 1);
     std::thread thread3(writeToFile);
 
     thread1.join();

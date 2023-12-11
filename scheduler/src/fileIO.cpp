@@ -235,7 +235,7 @@ bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
     pthread_mutex_lock(&(recv_buf.mutex));
 
     int idx = chunkNumber - recv_buf.startChunkNum;
-    if (idx < recv_buf_size){
+    if (idx < recv_buf_size && idx >= 0){
         if (bytesReceived != chunkSize){
             memcpy(recv_buf.irregularBuf, content, bytesReceived);
             printf("receved irregular buffer:%d of size: %d ", chunkNumber, bytesReceived);
