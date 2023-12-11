@@ -11,12 +11,13 @@
 #include <iostream>
 #include <cstring>
 #include <fcntl.h>
-#include "fileIO.h"
 #include <thread>
+#include "fileIO.h"
 
 #define KB 1000
 #define PKT_SIZE 1400
 #define BUFFER_SIZE 400
+#define CHUNK_SIZE 1400*100
 
 #define FIN 0
 #define DATA 1
@@ -27,11 +28,17 @@ using namespace std;
 struct sockaddr_in si_me, si_other;
 int s, slen;
 
+
+struct chunk_t{
+    char chunk_buf[CHUNK_SIZE];
+	unsigned int chunkBytes;
+	int chunkIdx;
+};
+
 typedef struct{
   int seq_num;
   int ack_num;
   int RSF;
-  int chunk_num;
   int datalen;
   char data[PKT_SIZE];
 }pkt;
@@ -41,12 +48,10 @@ void diep(char *s) {
     exit(1);
 }
 
+int createSocket(unsigned short int myUDPport){
+	slen = sizeof (si_other);
 
-void reliablyReceive(unsigned short int myUDPport, int threadNum) {
-    
-    slen = sizeof (si_other);
 
-	cout << myUDPport << endl;
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         diep("socket");
 
@@ -57,10 +62,16 @@ void reliablyReceive(unsigned short int myUDPport, int threadNum) {
     printf("Now binding\n");
     if (::bind(s, (struct sockaddr*) &si_me, sizeof (si_me)) == -1)
         diep("bind");
+	return s;
+}
+
+void reliablyReceive(int s, char* largeBuffer, size_t largeBufferSize) {
+    
+    
 
     
 	/* Now receive data and send acknowledgements */    
-
+    // FILE* fp = fopen(destinationFile,"wb");
     
     pkt buffer[BUFFER_SIZE];
     char buf[sizeof(pkt)];
@@ -74,13 +85,16 @@ void reliablyReceive(unsigned short int myUDPport, int threadNum) {
     int tmp_idx;
     int buffer_head = 0;
     int recvbytes;
+	
+    size_t bufferWritePos = 0;
+
     while(1){
     	if((recvbytes = recvfrom(s, buf, sizeof(pkt), 0, (struct sockaddr*)&sender_addr,&addrlen)) <= 0){
     		fprintf(stderr,"No Data");
     		exit(1);
     	}
     	memcpy(&pkt_in, buf, sizeof(pkt));
-    	//cout << "pkt num: " << pkt_in.seq_num << " type: " << pkt_in.RSF << endl;
+    	cout << "pkt num: " << pkt_in.seq_num << " type: " << pkt_in.RSF << endl;
     	
     	if(pkt_in.RSF == FIN){				// sender close TCP connection
     		ack.seq_num = 0;
@@ -88,24 +102,17 @@ void reliablyReceive(unsigned short int myUDPport, int threadNum) {
     		ack.RSF = FIN;
     		memcpy(buf,&ack,sizeof(pkt));
     		sendto(s, buf, sizeof(pkt), 0, (struct sockaddr*) &sender_addr, addrlen);
-    		cout << "closed connection from " << threadNum << endl;
+    		cout << "closed connection" << endl;
     		break;
 
     	}else if(pkt_in.RSF == DATA){                   //receive packet
     	   if(pkt_in.seq_num == NextACK){
     	   	memcpy(&buffer[ToBeFilledIdx], &pkt_in, sizeof(pkt));
     	   	// fwrite(&pkt_in.data, sizeof(char), pkt_in.datalen,fp);
-			bool res = storeData(pkt_in.data, pkt_in.chunk_num, pkt_in.datalen);
-			if (res){
-				cout << "aaaaaaaaaaaaa" << endl;
-
-				cout << "receive pck num: " << pkt_in.seq_num << "on thread " << threadNum << endl;
-				cout << pkt_in.data << endl;
-				cout << "aaaaaaaaaaaaa" << endl;
-			}
-			cout << "receive pck num: " << pkt_in.seq_num << "on thread " << threadNum << endl;
-    	   //	cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
-    	   	//cout << "written " << pkt_in.data << " bytes into file" << endl;
+			memcpy(largeBuffer + bufferWritePos, pkt_in.data, pkt_in.datalen);
+    		bufferWritePos += pkt_in.datalen;
+    	   	//cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
+    	   	//cout << "written " << pkt_in.datalen << " bytes into file" << endl;
     	   	
     	   	ToBeFilledIdx = (ToBeFilledIdx + 1) % BUFFER_SIZE;
     	   	if (ToBeFilledIdx == 0) buffer_head = buffer[BUFFER_SIZE-1].seq_num;
@@ -113,10 +120,10 @@ void reliablyReceive(unsigned short int myUDPport, int threadNum) {
     	  
     	   	
     	   	while(ack_status[ToBeFilledIdx] != 0){
-    	   	   //fwrite(&buffer[ToBeFilledIdx].data, sizeof(char), buffer[ToBeFilledIdx].datalen,fp);
-    	   	   
-			   
-			   //cout << " write ahead data " << buffer[ToBeFilledIdx].seq_num << endl;
+    	   	//    fwrite(&buffer[ToBeFilledIdx].data, sizeof(char), buffer[ToBeFilledIdx].datalen,fp);
+			   memcpy(largeBuffer + bufferWritePos, buffer[ToBeFilledIdx].data, buffer[ToBeFilledIdx].datalen);
+    		   bufferWritePos += buffer[ToBeFilledIdx].datalen;
+    	   	   //cout << " write ahead data " << buffer[ToBeFilledIdx].seq_num << endl;
     	   	   ack_status[ToBeFilledIdx] = 0;
     	   	   ToBeFilledIdx = (ToBeFilledIdx + 1)%BUFFER_SIZE;
     	   	   //cout << "nexted buffed ack: " << ack_status[ToBeFilledIdx] << endl;
@@ -154,15 +161,46 @@ void reliablyReceive(unsigned short int myUDPport, int threadNum) {
 
     	}
    
-    close(s);
-    printf("received.");
+    
+    printf("connection received.");
     return;
     
     
     
     
     }
-	
+
+void receiveData(int socket) {
+	const size_t LARGE_BUFFER_SIZE = sizeof(chunk_t); // 10 MB, for example
+    char* largeBuffer = (char*)malloc(LARGE_BUFFER_SIZE);
+    if (!largeBuffer) {
+        perror("Failed to allocate large buffer");
+        exit(1);
+    }
+    while (true) {
+		
+        chunk_t packet;
+        // ssize_t n = recv(socket, &packet, sizeof(packet), 0);
+        // std::cout << "Received chunk number: " << packet.data << std::endl;
+        //storeData(packet.data, packet.chunkNumber, n - sizeof(int));
+		reliablyReceive(socket, largeBuffer,LARGE_BUFFER_SIZE );
+		memcpy(&packet, largeBuffer, sizeof(largeBuffer));
+        std::cout << "Received chunk number: " << packet.chunkIdx << std::endl;
+		if (packet.chunkIdx == -1){
+			break;
+		}
+		//fwrite(largeBuffer, 1, LARGE_BUFFER_SIZE, stdout);
+		storeData(packet.chunk_buf, packet.chunkIdx, packet.chunkBytes);
+    	//memset(largeBuffer, 0, LARGE_BUFFER_SIZE);
+		
+ 
+    }
+	free(largeBuffer);
+	return;
+	}
+
+
+
 
 /*
  * 
@@ -171,26 +209,33 @@ int main(int argc, char** argv) {
 
     unsigned short int udpPort;
 
-    if (argc > 3) {
+    if (argc != 3) {
         fprintf(stderr, "usage: %s UDP_port filename_to_write\n\n", argv[0]);
         exit(1);
     }
-	char* destinationFile = argv[2];
-	initFileWrite(destinationFile, 1400, ALTERNATE);
+
+
     udpPort = (unsigned short int) atoi(argv[1]);
 
+    initFileWrite(argv[2], 1400*100, CONSECUTIVE);
+	int s1 = createSocket(udpPort);
+	int s2 = createSocket(udpPort);
 
-    
+	receiveData(s1);
+	receiveData(s2);
 
-	std::thread thread1(reliablyReceive, udpPort, 0);
-    std::thread thread2(reliablyReceive, udpPort+1, 1);
-    std::thread thread3(writeToFile);
+	std::thread thread1(receiveData, s1);
+	std::thread thread2(receiveData, s2);
+	std::thread thread3(writeToFile);
 
-    thread1.join();
-    thread2.join();
-
-	fuckPi = true;    
-    thread3.join();
-
+	thread1.join();
+	thread2.join();
+	fuckPi = true;
+	thread3.join();
+	
 	closeWriteFile();
+   
+	close(s1);
+	close(s2);
+
 }
