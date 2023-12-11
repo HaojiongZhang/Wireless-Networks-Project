@@ -11,6 +11,8 @@
 #include <iostream>
 #include <cstring>
 #include <fcntl.h>
+#include "fileIO.h"
+#include <thread>
 
 #define KB 1000
 #define PKT_SIZE 1400
@@ -39,7 +41,7 @@ void diep(char *s) {
 }
 
 
-void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
+void reliablyReceive(unsigned short int myUDPport) {
     
     slen = sizeof (si_other);
 
@@ -57,7 +59,7 @@ void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
 
     
 	/* Now receive data and send acknowledgements */    
-    FILE* fp = fopen(destinationFile,"wb");
+
     
     pkt buffer[BUFFER_SIZE];
     char buf[sizeof(pkt)];
@@ -84,14 +86,16 @@ void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
     		ack.ack_num = NextACK;
     		ack.RSF = FIN;
     		memcpy(buf,&ack,sizeof(pkt));
-    		sendto(s, buf, sizeof(pkt), 0, (struct sockaddr*) &sender_addr, addrlen)
+    		sendto(s, buf, sizeof(pkt), 0, (struct sockaddr*) &sender_addr, addrlen);
     		cout << "closed connection" << endl;
     		break;
 
     	}else if(pkt_in.RSF == DATA){                   //receive packet
     	   if(pkt_in.seq_num == NextACK){
     	   	memcpy(&buffer[ToBeFilledIdx], &pkt_in, sizeof(pkt));
-    	   	fwrite(&pkt_in.data, sizeof(char), pkt_in.datalen,fp);
+    	   	// fwrite(&pkt_in.data, sizeof(char), pkt_in.datalen,fp);
+			storeData(pkt_in.data, pkt_in.seq_num, pkt_in.datalen);
+
     	   	//cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
     	   	//cout << "written " << pkt_in.datalen << " bytes into file" << endl;
     	   	
@@ -101,8 +105,10 @@ void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
     	  
     	   	
     	   	while(ack_status[ToBeFilledIdx] != 0){
-    	   	   fwrite(&buffer[ToBeFilledIdx].data, sizeof(char), buffer[ToBeFilledIdx].datalen,fp);
-    	   	   //cout << " write ahead data " << buffer[ToBeFilledIdx].seq_num << endl;
+    	   	   //fwrite(&buffer[ToBeFilledIdx].data, sizeof(char), buffer[ToBeFilledIdx].datalen,fp);
+    	   	   
+			   
+			   //cout << " write ahead data " << buffer[ToBeFilledIdx].seq_num << endl;
     	   	   ack_status[ToBeFilledIdx] = 0;
     	   	   ToBeFilledIdx = (ToBeFilledIdx + 1)%BUFFER_SIZE;
     	   	   //cout << "nexted buffed ack: " << ack_status[ToBeFilledIdx] << endl;
@@ -141,7 +147,7 @@ void reliablyReceive(unsigned short int myUDPport, char* destinationFile) {
     	}
    
     close(s);
-    printf("%s received.", destinationFile);
+    printf("%s received.");
     return;
     
     
@@ -157,12 +163,26 @@ int main(int argc, char** argv) {
 
     unsigned short int udpPort;
 
-    if (argc != 3) {
+    if (argc > 3) {
         fprintf(stderr, "usage: %s UDP_port filename_to_write\n\n", argv[0]);
         exit(1);
     }
-
+	char* destinationFile = argv[2];
+	initFileWrite(destinationFile, 1400, ALTERNATE);
     udpPort = (unsigned short int) atoi(argv[1]);
+	int port = std::stoi(argv[1]);
 
-    reliablyReceive(udpPort, argv[2]);
+    
+
+	std::thread thread1(reliablyReceive, port);
+    std::thread thread2(reliablyReceive, port+1);
+    std::thread thread3(writeToFile);
+
+    thread1.join();
+    thread2.join();
+
+	fuckPi = true;    
+    thread3.join();
+
+	closeWriteFile();
 }

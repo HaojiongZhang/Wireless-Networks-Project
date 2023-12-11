@@ -2,6 +2,11 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <cstring>
+#include <cstdlib>
+#include <ostream>
+#include <pthread.h>
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define NUMTHREADS 2
 
@@ -9,31 +14,37 @@
 typedef struct{
     int chunkIdx[NUMTHREADS];
     int partitionStartChunk[NUMTHREADS];
-    FILE fp_rx_thread[NUMTHREADS];
+    FILE* fp_rx_thread[NUMTHREADS];
 }threadSpecficCtrl_t;
 
 typedef struct{
     int startChunkNum;
-    int nextEmpty;
-    int consec;
+    int count;
     char* buf;
     bool* occupied;
-    bool mutex;
+    char irregularBuf[1024];
+    int irregularSize;
+    pthread_mutex_t mutex;
 }recv_buf_t;
 
-FILE* fp_tx;
+FILE *fp_tx, *fp_rx;
 int chunkSize;
 int totalChunks;
 partition_t partitionMethod;
-const int recv_buf_size = 64;
+const int recv_buf_size = 512;
+volatile bool fuckPi = false;
 
 static int currentChunk = 0;
 threadSpecficCtrl_t threadCtrl; 
 recv_buf_t recv_buf;
+recv_buf_t thread_buf[NUMTHREADS];
+
 
 
 int readAltChunk(char* buf, int* chunkNumPtr, int partition);
 int readSequentialChunk(char* buf, int* chunkNumPtr);
+int readEndsChunk(char* buf, int* chunkNumPtr, int partition);
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived);
 
 
 // Init fileIO and return total number of chunks of the file
@@ -56,12 +67,12 @@ int initFileRead(const char* path, int bytesPerChunk, partition_t partitiontype)
     switch (partitiontype){
     case ALTERNATE:
     case CONSECUTIVE:
-        chunkIdx[0] = 0;
-        chunkIdx[1] = 1;
+        threadCtrl.chunkIdx[0] = 0;
+        threadCtrl.chunkIdx[1] = 1;
         break;
     case TWOENDS:
-        chunkIdx[0] = 0;
-        chunkIdx[1] = totalChunks-1;
+        threadCtrl.chunkIdx[0] = 0;
+        threadCtrl.chunkIdx[1] = totalChunks-1;
     default:
         break;
     }
@@ -79,7 +90,7 @@ int readChunk(char* buf, int* chunkNumPtr, int partition){
         (void) partition;
         return readSequentialChunk(buf, chunkNumPtr);
     case TWOENDS:
-        return readEndsChunk(buf, chunkNumPtr);
+        return readEndsChunk(buf, chunkNumPtr, partition);
     }
 
     (void)partition;
@@ -92,14 +103,16 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
     finalChunk = totalChunks - NUMTHREADS + partition;
 
     /* Check if already completed reading */
-    if (*chunk == finalChunk){
+    if (*chunk > finalChunk){
         *chunkNumBuf = *chunk;
         return 0;
     }
 
     memset(buf, 0, chunkSize);
+    pthread_mutex_lock(&mutex);
     fseek(fp_tx, (*chunk)*chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp_tx);
+    pthread_mutex_unlock(&mutex);
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -112,6 +125,7 @@ int readAltChunk(char* buf, int* chunkNumBuf, int partition){
 
 // Read the next sequential chunk from the file
 int readSequentialChunk(char* buf, int* chunkNumPtr){
+    
     /* Check if already completed reading */
     if (currentChunk == totalChunks){
         *chunkNumPtr = currentChunk;
@@ -119,30 +133,38 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
     }
 
     memset(buf, 0, chunkSize);
+    
+    pthread_mutex_lock(&mutex);
     int bytesRead = fread(buf, 1, chunkSize, fp_tx);
-
-    if (bytesRead <= 0){
-        printf("Chunk read error \n");
+    if (bytesRead < 0){
+        printf("chunk read error");
         return -1;
     }
+    pthread_mutex_unlock(&mutex);
     *chunkNumPtr = currentChunk;
     currentChunk++;
+    
+    
+    
     return bytesRead;
 }
 
-int readEndsChunk(char* buf, int* chunkNumPtr){
+int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
+    pthread_mutex_lock(&mutex);
     /* Check if already completed reading */
     if (threadCtrl.chunkIdx[0] == threadCtrl.chunkIdx[1]){
         *chunkNumPtr = threadCtrl.chunkIdx[0];
         return 0;
     }
 
-    int *chunk, finalChunk;
+    int *chunk;
     chunk = threadCtrl.chunkIdx + partition;
 
     memset(buf, 0, chunkSize);
+    
     fseek(fp_tx, (*chunk) * chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp_tx);
+    
 
     if (bytesRead <= 0){
         printf("Chunk read error \n");
@@ -150,22 +172,18 @@ int readEndsChunk(char* buf, int* chunkNumPtr){
     }
     *chunkNumPtr = currentChunk;
     (*chunk)--;
+    pthread_mutex_unlock(&mutex);
     return bytesRead;
 }
 
 bool hasMoreChunks(int thread){
     switch (partitionMethod){
     case CONSECUTIVE:
-        return currentChunk != totalChunks;
+        return currentChunk < totalChunks;
     case ALTERNATE:
-        if (thread == 0){
-            return chunkIdx_t0 != partitionStartChunk;
-        }
-        else {
-            return chunkIdx_t1 != totalChunks;
-        }
+        return threadCtrl.chunkIdx[thread] <= (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
-        return false;
+        return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
     }
     
     return false;
@@ -173,65 +191,108 @@ bool hasMoreChunks(int thread){
 
 
 void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
-    int t;
-    for (t = 0; t < NUMTHREADS; t++){
-        char filename[5];
-        sprintf(filename, "%d", t);
-        threadCtrl.fp_rx_thread[t] = fopen(filename, "w");
-    }
+    
     partitionMethod = partition;
     chunkSize = bytesPerChunk;
 
-    recv_buf.storeBuf = malloc(bytesPerChunk * recv_buf_size);
-    recv_buf.occupied = malloc(sizeof(bool) * recv_buf_size);
-    recv_buf.startChunkNum = 0;
-    recv_buf.consec = 0;
-    recv_buf.nextEmpty = 0;
+    
+    fp_rx = fopen(writeFile, "w");
+
+    if (partition == TWOENDS){
+        int t;
+        for (t = 0; t < NUMTHREADS; t++){
+            char filename[5];
+            sprintf(filename, "%d", t);
+            threadCtrl.fp_rx_thread[t] = fopen(filename, "w");
+
+            thread_buf[t].buf = (char*)malloc(bytesPerChunk * recv_buf_size);
+            thread_buf[t].occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
+            thread_buf[t].startChunkNum = 0;
+            thread_buf[t].count = 0;
+        }
+    }
+    else {
+        recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
+        recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
+        recv_buf.startChunkNum = 0;
+        recv_buf.count = 0;
+    }
 }
 
-void storeData(char* content, int chunkNumber){
+bool storeData(char* content, int chunkNumber, int bytesReceived){
     switch (partitionMethod){
         case ALTERNATE:
         case CONSECUTIVE:
-            InOrderStore(content, chunkNumber);
+            return InOrderStore(content, chunkNumber, bytesReceived);
             break;
         default:
+            return false;
             break;
     }
 }
 
-bool InOrderStore(char* content, int chunkNumber){
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
+    pthread_mutex_lock(&(recv_buf.mutex));
+
     int idx = chunkNumber - recv_buf.startChunkNum;
-    if (chunkNumber - recv_buf.startChunkNum < recv_buf_size){
-        while (recv_buf.mutex){
-            recv_buf.mutex = true;
-            memcpy(&recv_buf.buf[idx], content, chunkSize);
-            recv_buf.occupied[idx] = true;
-            recv_buf.mutex = false;
+    if (idx < recv_buf_size){
+        if (bytesReceived != chunkSize){
+            memcpy(recv_buf.irregularBuf, content, bytesReceived);
+            printf("receved irregular buffer:%d of size: %d ", chunkNumber, bytesReceived);
+            recv_buf.irregularSize = bytesReceived;
         }
+        else {
+            memcpy(&recv_buf.buf[idx * chunkSize], content, chunkSize);
+            recv_buf.occupied[idx] = true;
+            printf("buffer head: %d. occupacy: %d%d%d%d\n", recv_buf.startChunkNum, recv_buf.occupied[0],recv_buf.occupied[1], recv_buf.occupied[2], recv_buf.occupied[3]);
+            recv_buf.count++;
+        }
+        pthread_mutex_unlock(&(recv_buf.mutex));
+
         return true;
     }
     else{
+        pthread_mutex_unlock(&(recv_buf.mutex));
         return false;
     }
 }
 
 void writeToFile(){
-    while(recv_buf.mutex){
-        recv_buf.mutex = true;
-        int idx = 0;
-        while (idx < recv_buf_size){
-            if (recv_buf.occupied[idx]){
-                idx++;
-                recv_buf.consec = idx;
-            }
+    while (true){
+        
+
+        int count = 0;
+        while (recv_buf.occupied[count]){
+            count++;
         }
-        memmove(recv_buf.buf, recv_buf.buf[recv_buf.consec], recv_buf_size - recv_buf.consec);
-        recv_buf.consec = 0;
-        recv_buf.mutex = false;
+
+        if (count != 0){
+            pthread_mutex_lock(&(recv_buf.mutex));
+            printf("writing %d blocks until %d \n", count, count+recv_buf.startChunkNum);
+            fwrite(recv_buf.buf, chunkSize, count, fp_rx);
+
+            memmove(recv_buf.buf, &recv_buf.buf[(count)*chunkSize], (recv_buf_size - count) * chunkSize);
+            memmove(recv_buf.occupied, &recv_buf.occupied[count], (recv_buf_size - count) * sizeof(bool));
+            memset(&recv_buf.occupied[recv_buf_size - count], 0, count*sizeof(bool));
+            recv_buf.count -= count;
+            recv_buf.startChunkNum += count;
+            pthread_mutex_unlock(&(recv_buf.mutex));
+        }
+        
+
+        if (fuckPi && recv_buf.count == 0){
+            fwrite(recv_buf.irregularBuf, recv_buf.irregularSize, 1, fp_rx);
+            return;
+        }
     }
 }
 
+
+
 void closeFile(){
     fclose(fp_tx);
+}
+
+void closeWriteFile(){
+    fclose(fp_rx);
 }

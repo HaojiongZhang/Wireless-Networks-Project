@@ -78,7 +78,7 @@ int cogctrl(int cwnd, int multiACK, bool timeout){
 
 }
 
-int createSocket(char* hostname, unisgned short int hostUDPport){
+int createSocket(char* hostname, unsigned short int hostUDPport){
 	slen = sizeof (si_other);
 
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -105,22 +105,8 @@ int createSocket(char* hostname, unisgned short int hostUDPport){
 }
 
 
-void reliablyTransfer(int s, char* inputBuffer, unsigned long long int bytesToTransfer) {
-    //Open the file
-    
-    
-      /* setting up packet buffer      */
-    int TOTAL_BUFF_SIZE = 1000;
-    int finalPKTNum = ceil(static_cast<double>(bytesToTransfer)/PKT_SIZE);
-    int bytes_left = bytesToTransfer;
-    
-    //pkt dataBuffer[TOTAL_BUFF_SIZE];
+void reliablyTransfer(int s, int threadNum) {
 
-    
-	/* Determine how many bytes to transfer */
-
-    
-    // end - move this out //
     
 	/* Send data and receive acknowledgements on s*/
     int numbytes;
@@ -137,24 +123,27 @@ void reliablyTransfer(int s, char* inputBuffer, unsigned long long int bytesToTr
     int bytesRead, startval;
     deque<time_point<high_resolution_clock>> timestamps;
     deque<pkt> NotYetACK;
-	char *currentBufferPosition = inputBuffer;
-    cout << inputBuffer << endl;
+	int finalPKTNum = 0;
+	bool lastPKTSent = false;
+
     while(TRUE){
-    		pktToSend = min(cwnd - (int)NotYetACK.size(),finalPKTNum - latestSeqNum);
+    		pktToSend = cwnd - (int)NotYetACK.size();
     		pktToSend = max(0,pktToSend);
     		//cout << "arg1: " << cwnd - (int)NotYetACK.size() <<"arg2: "<< finalPKTNum - latestSeqNum + 1 <<endl;
     		//cout << "pkttosend: " << pktToSend << " latestseqn: " << latestSeqNum << "finalpktnum: " << finalPKTNum << endl;
     		//sending pkts:
     		startval = (int)NotYetACK.size();
-    		for(int i = startval; i < startval + pktToSend; i++){
+    		for(int i = 0; i < pktToSend; i++){
     		   //read from file
-    		   	pkt tmp;
-    			int bytesRead = min(PKT_SIZE, bytes_left);
-				cout << inputBuffer << endl;
-				memcpy(tmp.data, inputBuffer, bytesRead);
+			   if (hasMoreChunks(threadNum)){
 				
-				inputBuffer += bytesRead;
-				bytes_left -= bytesRead;
+				pkt tmp;
+    			int bytesRead = readChunk(tmp.data, &tmp.seq_num, threadNum);
+				cout << tmp.data << endl;
+				
+				
+			
+			
 			  	tmp.seq_num = latestSeqNum;
 			  	latestSeqNum ++;
 			  	tmp.ack_num = -1;
@@ -169,15 +158,21 @@ void reliablyTransfer(int s, char* inputBuffer, unsigned long long int bytesToTr
 				cout << tmp.data << endl;
 
 				cout << snd_buffer << endl;
+
+				finalPKTNum = latestSeqNum;
 		    	if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){  //  sendto?????
 		    	   	cout<<"fail to send seq_num: " << tmp.seq_num << endl;
 		    	   	exit(1);
 		    	}else{cout<<"sent seq_num: " << tmp.seq_num <<endl;}
+
+			   }else{
+				lastPKTSent = true;
+			   }
+    		   	
     		}
     		//receiving pkt
     		if((numbytes = recvfrom(s,rcv_buffer,sizeof(pkt),0,(struct sockaddr*)&si_other,(socklen_t*)&slen))==-1){   //rcv timeout
     		
-    			
 	    		if(errno == EAGAIN || errno == EWOULDBLOCK){   //timeout occured
 	    			//check for which packet has timed out 
 	    			for(int i = 0; i < timestamps.size(); i++){
@@ -226,7 +221,7 @@ void reliablyTransfer(int s, char* inputBuffer, unsigned long long int bytesToTr
 			else if(dataType == ACK){
 				
 				
-				if(ackNum == finalPKTNum ){
+				if((ackNum == finalPKTNum) && (lastPKTSent)){
 			    		cout << "sending FIN" << endl;
 			    		pkt fin_pkt;
 			    		fin_pkt.seq_num = -1;
@@ -276,15 +271,6 @@ void closeSocket(int s){
     return;
 }
 
-void transfer(int socket, int threadNum){
-	char* buffer[CHUNK_SIZE];
-	unsigned short chunkNumber;
-	int bytesRead;
-	while((bytesRead = readChunk(buffer, &chunkNumber, threadNum)) > 0){
-		reliablyTransfer(socket, buffer, bytesRead);
-	}
-}
-
 /*
  * 
  */
@@ -302,10 +288,10 @@ int main(int argc, char** argv) {
 	int socket1 = createSocket(argv[1], udpPort);
 	int socket2 = createSocket(argv[2], udpPort+1);
 
-	int totalChunks = initFileRead(argv[4], 1400, HALF_HALF);
+	int totalChunks = initFileRead(argv[4], 1400, ALTERNATE);
 
-	std::thread thread1(transfer, socket1); 
-    std::thread thread2(transfer, socket2);
+	std::thread thread1(reliablyTransfer, socket1, 0); 
+    std::thread thread2(reliablyTransfer, socket2, 1);
 
 	closeFile();
 

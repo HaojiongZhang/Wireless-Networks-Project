@@ -1,24 +1,28 @@
 CXX = g++
-COMPILERFLAGS = -g -Wall -Wextra -Wno-sign-compare -pthread -std=c++11
+COMPILERFLAGS = -g -Wall -Wextra -Wno-sign-compare -pthread -std=c++11 -Isrc
 
-RECEIVEOBJECTS = obj/reliableReceive.o
-TRANSFEROBJECTS = obj/reliableTransfer.o
 
-.PHONY: all clean setup
+SERVEROBJECTS = obj/server.o obj/fileIO.o
+CLIENTOBJECTS = obj/client.o obj/fileIO.o
+TESTOBJS = obj/test.o obj/fileIO.o
 
-all: setup reliableReceive reliableTransfer
+.PHONY: all clean
 
-reliableReceive: $(RECEIVEOBJECTS)
+all : obj server client test
+
+server: $(SERVEROBJECTS)
+	$(CXX) $(COMPILERFLAGS) $^ -o $@ 
+
+client: $(CLIENTOBJECTS)
 	$(CXX) $(COMPILERFLAGS) $^ -o $@
 
-reliableTransfer: $(TRANSFEROBJECTS)
+test: $(TESTOBJS)
 	$(CXX) $(COMPILERFLAGS) $^ -o $@
 
-clean:
-	$(RM) obj/*.o reliableReceive reliableTransfer
+clean :
+	$(RM) obj/*.o server client test
 
 obj/%.o: src/%.cpp
 	$(CXX) $(COMPILERFLAGS) -c -o $@ $<
-
-setup:
+obj:
 	mkdir -p obj
