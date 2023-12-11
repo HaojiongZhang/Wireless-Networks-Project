@@ -125,8 +125,9 @@ void reliablyTransfer(int s, int threadNum) {
     deque<pkt> NotYetACK;
 	int finalPKTNum = 0;
 	bool lastPKTSent = false;
+	bool immFIN = false;
 	if (!hasMoreChunks(threadNum)){
-		return;
+		immFIN = true;
 	}
     while(TRUE){
     		pktToSend = cwnd - (int)NotYetACK.size();
@@ -230,7 +231,7 @@ void reliablyTransfer(int s, int threadNum) {
 				cout << lastPKTSent << endl;
 				cout << "Assssssss" << endl;
 
-				if((ackNum == finalPKTNum) && (lastPKTSent)){
+				if(((ackNum == finalPKTNum+1) && (lastPKTSent))||immFIN){
 			    		cout << "sending FIN" << endl;
 			    		pkt fin_pkt;
 			    		fin_pkt.seq_num = -1;

@@ -96,8 +96,8 @@ void reliablyReceive(unsigned short int myUDPport) {
     	   	// fwrite(&pkt_in.data, sizeof(char), pkt_in.datalen,fp);
 			storeData(pkt_in.data, pkt_in.seq_num, pkt_in.datalen);
 
-    	   	//cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
-    	   	//cout << "written " << pkt_in.datalen << " bytes into file" << endl;
+    	   	cout << "written pkt" << pkt_in.seq_num << " bytes into file, toBeFilledIdx is now: "<< ToBeFilledIdx << endl;
+    	   	cout << "written " << pkt_in.datalen << " bytes into file" << endl;
     	   	
     	   	ToBeFilledIdx = (ToBeFilledIdx + 1) % BUFFER_SIZE;
     	   	if (ToBeFilledIdx == 0) buffer_head = buffer[BUFFER_SIZE-1].seq_num;
