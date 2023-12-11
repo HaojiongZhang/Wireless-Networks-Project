@@ -125,16 +125,20 @@ void reliablyTransfer(int s, int threadNum) {
     deque<pkt> NotYetACK;
 	int finalPKTNum = 0;
 	bool lastPKTSent = false;
-
+	if (!hasMoreChunks(threadNum)){
+		return;
+	}
     while(TRUE){
     		pktToSend = cwnd - (int)NotYetACK.size();
     		pktToSend = max(0,pktToSend);
     		//cout << "arg1: " << cwnd - (int)NotYetACK.size() <<"arg2: "<< finalPKTNum - latestSeqNum + 1 <<endl;
-    		//cout << "pkttosend: " << pktToSend << " latestseqn: " << latestSeqNum << "finalpktnum: " << finalPKTNum << endl;
+    		// cout << "pkttosend: " << pktToSend << " latestseqn: " << latestSeqNum << "finalpktnum: " << finalPKTNum << endl;
     		//sending pkts:
     		startval = (int)NotYetACK.size();
     		for(int i = 0; i < pktToSend; i++){
     		   //read from file
+			
+
 			   if (hasMoreChunks(threadNum)){
 				
 				pkt tmp;
@@ -144,8 +148,8 @@ void reliablyTransfer(int s, int threadNum) {
 				
 			
 			
-			  	tmp.seq_num = latestSeqNum;
-			  	latestSeqNum ++;
+			  	latestSeqNum = tmp.seq_num;
+			  	
 			  	tmp.ack_num = -1;
 			  	tmp.RSF = DATA;
 			  	tmp.datalen = bytesRead;
@@ -154,10 +158,7 @@ void reliablyTransfer(int s, int threadNum) {
 			  	timestamps.push_back(high_resolution_clock::now());    //keep track of current timestamp
 			  	//send current pkt 
 			   	memcpy(snd_buffer, &tmp, sizeof(pkt));
-				cout << "asdasda" << endl;
-				cout << tmp.data << endl;
-
-				cout << snd_buffer << endl;
+	
 
 				finalPKTNum = latestSeqNum;
 		    	if((numbytes = sendto(s, snd_buffer, sizeof(pkt),0,(struct sockaddr*)&si_other,slen))== -1){  //  sendto?????
@@ -166,6 +167,9 @@ void reliablyTransfer(int s, int threadNum) {
 		    	}else{cout<<"sent seq_num: " << tmp.seq_num <<endl;}
 
 			   }else{
+				lastPKTSent = true;
+			   }
+			   if (!hasMoreChunks(threadNum)){
 				lastPKTSent = true;
 			   }
     		   	
@@ -189,7 +193,7 @@ void reliablyTransfer(int s, int threadNum) {
 			    		 	        pkt rnd;
 			    		 	        memcpy(&rnd,snd_buffer, sizeof(pkt));
 			    		 	
-			    		 		cout << "resend timed out pkt_num: " << NotYetACK[i].seq_num << endl;
+			    		 		cout << threadNum<<"resend timed out pkt_num: " << NotYetACK[i].seq_num << endl;
 			    		 		cout << "timeout packet " << rnd.seq_num << endl;
 			    		 	}
 			    			// congestion controll -> timeout
@@ -211,16 +215,21 @@ void reliablyTransfer(int s, int threadNum) {
 		    	memcpy(&rcv_pkt,rcv_buffer,sizeof(pkt));
 		    	int ackNum = rcv_pkt.ack_num;
 		    	int dataType = rcv_pkt.RSF;
-		    	//cout << "received ackNum: " << ackNum << endl;
+		    	cout << "received ackNum: " << ackNum << endl;
 		    	if(dataType == FIN){  //case 2 end of TCP connection received fin_ack
-		    		printf("received FIN_ACK");
-		    		break;
+		    		printf("received FIN_ACK %s", threadNum);
+		    		return;
 		    	
 		    	}
     			//case1 recieved ack for last pkt
 			else if(dataType == ACK){
 				
-				
+				cout << "Assssssss" << endl;
+				cout << ackNum << endl;
+				cout << finalPKTNum << endl;
+				cout << lastPKTSent << endl;
+				cout << "Assssssss" << endl;
+
 				if((ackNum == finalPKTNum) && (lastPKTSent)){
 			    		cout << "sending FIN" << endl;
 			    		pkt fin_pkt;
@@ -288,16 +297,19 @@ int main(int argc, char** argv) {
 	int socket1 = createSocket(argv[1], udpPort);
 	int socket2 = createSocket(argv[2], udpPort+1);
 
-	int totalChunks = initFileRead(argv[4], 1400, ALTERNATE);
+	int totalChunks = initFileRead(argv[4], 1400, CONSECUTIVE);
 
 	std::thread thread1(reliablyTransfer, socket1, 0); 
     std::thread thread2(reliablyTransfer, socket2, 1);
-
+	thread1.join();
+    thread2.join();
 	closeFile();
 
 	// char buffer[] = "This is a test data\n";
 	// cout << buffer << endl;
     // reliablyTransfer(argv[1], udpPort, buffer, sizeof(buffer));
+	closeSocket(socket1);
+	closeSocket(socket2);
 
 
     return (EXIT_SUCCESS);

@@ -45,7 +45,7 @@ void reliablyReceive(unsigned short int myUDPport) {
     
     slen = sizeof (si_other);
 
-
+	cout << myUDPport << endl;
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         diep("socket");
 
@@ -147,7 +147,7 @@ void reliablyReceive(unsigned short int myUDPport) {
     	}
    
     close(s);
-    printf("%s received.");
+    printf("received.");
     return;
     
     
@@ -170,12 +170,12 @@ int main(int argc, char** argv) {
 	char* destinationFile = argv[2];
 	initFileWrite(destinationFile, 1400, ALTERNATE);
     udpPort = (unsigned short int) atoi(argv[1]);
-	int port = std::stoi(argv[1]);
+
 
     
 
-	std::thread thread1(reliablyReceive, port);
-    std::thread thread2(reliablyReceive, port+1);
+	std::thread thread1(reliablyReceive, udpPort);
+    std::thread thread2(reliablyReceive, udpPort+1);
     std::thread thread3(writeToFile);
 
     thread1.join();
