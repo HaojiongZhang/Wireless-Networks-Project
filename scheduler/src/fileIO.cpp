@@ -248,6 +248,8 @@ bool InOrderStore(char* content, int chunkNumber, int bytesReceived, int threadN
         pthread_mutex_unlock(&(recv_buf.mutex));
         return false;
     }
+
+    (void) threadNum;
 }
 
 bool ThreadStore(char* content, int chunkNumber, int bytesReceived, int threadNum){
@@ -255,6 +257,7 @@ bool ThreadStore(char* content, int chunkNumber, int bytesReceived, int threadNu
     if (chunkNumber == 0){
         initialThreadSegment = threadNum;
     }
+    return true;
 }
 
 void writeToFile(){
@@ -288,7 +291,7 @@ void writeToFile(){
 
 void finalizeWrite(){
     char c;
-    FILE* fptr1 = threadCtrl.fp_rx_thread[initialThreadSegment],;
+    FILE* fptr1 = threadCtrl.fp_rx_thread[initialThreadSegment];
     FILE* fptr2 = threadCtrl.fp_rx_thread[1 - initialThreadSegment];
 
     // Copy first segment to output file
@@ -297,7 +300,7 @@ void finalizeWrite(){
     }
 
     // Copy second segment to output file
-    while ( (c = fgetc(fptr1)) != EOF ){
+    while ( (c = fgetc(fptr2)) != EOF ){
         fputc(c, fp_rx);
     } 
 }
