@@ -188,7 +188,7 @@ bool hasMoreChunks(int thread){
     case ALTERNATE:
         return threadCtrl.chunkIdx[thread] <= (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
-        return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
+        return threadCtrl.chunkIdx[1] < threadCtrl.chunkIdx[0];
     }
     
     return false;
@@ -202,7 +202,8 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
 
     
     fp_rx = fopen(writeFile, "w");
-
+    threadCtrl.fp_rx_thread[0] = fopen(tmp1, "w");
+    threadCtrl.fp_rx_thread[1] = fopen(tmp2, "w");
     
     recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
     recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
