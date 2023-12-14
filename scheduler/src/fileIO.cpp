@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ostream>
 #include <pthread.h>
+#include <algorithm>
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -170,6 +171,7 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
         printf("Chunk read error \n");
         return -1;
     }
+    std::reverse(chunk, chunk+bytesRead);
     *chunkNumPtr = currentChunk;
     if (partition){
         (*chunk)--;
@@ -188,7 +190,7 @@ bool hasMoreChunks(int thread){
     case ALTERNATE:
         return threadCtrl.chunkIdx[thread] <= (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
-        return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
+        return threadCtrl.chunkIdx[1] >= threadCtrl.chunkIdx[0];
     }
     
     return false;
@@ -202,8 +204,8 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
 
     
     fp_rx = fopen(writeFile, "w");
-    threadCtrl.fp_rx_thread[0] = fopen(tmp1, "w");
-    threadCtrl.fp_rx_thread[1] = fopen(tmp2, "w");
+    threadCtrl.fp_rx_thread[0] = fopen("tmp1", "w");
+    threadCtrl.fp_rx_thread[1] = fopen("tmp2", "w");
     
     recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
     recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
@@ -290,9 +292,18 @@ void writeToFile(){
 
 void finalizeWrite(){
     char c;
-    FILE* fptr1 = threadCtrl.fp_rx_thread[initialThreadSegment];
-    FILE* fptr2 = threadCtrl.fp_rx_thread[1 - initialThreadSegment];
+    fclose(threadCtrl.fp_rx_thread[0]);
+    fclose(threadCtrl.fp_rx_thread[1]);
 
+    FILE* fptr1, *fptr2;
+    if (initialThreadSegment == 0){
+	fptr1 = fopen("tmp1", "r");
+	fptr2 = fopen("tmp2", "r");
+    }
+    else {
+	fptr1 = fopen("tmp2", "r");
+	fptr2 = fopen("tmp1", "r");
+    }
     // Copy first segment to output file
     while ( (c = fgetc(fptr1)) != EOF ){
         fputc(c, fp_rx);

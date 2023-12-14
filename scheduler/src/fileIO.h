@@ -19,6 +19,7 @@ bool hasMoreChunks(int thread);
 void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition);
 bool storeData(char* content, int chunkNumber, int bytesReceived, int threadNum);
 void writeToFile();
+void finalizeWrite();
 
 void closeFile();
 void closeWriteFile();

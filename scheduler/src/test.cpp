@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     
     t2.join();
 
-
+    finalizeWrite();
     closeFile();
     closeWriteFile();
 
