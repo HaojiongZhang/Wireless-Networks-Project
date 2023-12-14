@@ -7,12 +7,18 @@
 
 #define CHUNKSIZE 1024
 
+struct chunk_t{
+    char chunk_buf[CHUNK_SIZE];
+	unsigned int chunkBytes;
+	int chunkIdx;
+};
+
 void testRead(int totalChunks, int thread){
     chunk_t *chunk_buffer = (chunk_t*)malloc(sizeof(chunk_t));
     while (hasMoreChunks(thread)){
         chunk_buffer->chunkBytes = readChunk(chunk_buffer->chunk_buf, &chunk_buffer->chunkIdx, thread);
         printf("chunk:%d, thread:%d, size: %d \n", chunk_buffer->chunkIdx, thread, chunk_buffer->chunkBytes);
-        if (bytesRead > 0){
+        if (chunk_buffer->chunkBytes > 0){
             storeData(chunk_buffer->chunk_buf, chunk_buffer->chunkIdx, chunk_buffer->chunkBytes, thread);
         }
     }
@@ -25,8 +31,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int totalChunks = initFileRead(argv[1], 1400*100, CONSECUTIVE);
-    initFileWrite("write", 1400*100, CONSECUTIVE);
+    int totalChunks = initFileRead(argv[1], 1400*100, TWOENDS);
+    initFileWrite("write", 1400*100, TWOENDS);
 
 
 
