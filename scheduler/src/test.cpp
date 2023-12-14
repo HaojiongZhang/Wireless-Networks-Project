@@ -13,7 +13,7 @@ void testRead(int totalChunks, int thread){
         chunk_buffer->chunkBytes = readChunk(chunk_buffer->chunk_buf, &chunk_buffer->chunkIdx, thread);
         printf("chunk:%d, thread:%d, size: %d \n", chunk_buffer->chunkIdx, thread, chunk_buffer->chunkBytes);
         if (bytesRead > 0){
-            storeData(chunk_buffer->chunk_buf, chunk_buffer->chunkIdx, chunk_buffer->chunkBytes);
+            storeData(chunk_buffer->chunk_buf, chunk_buffer->chunkIdx, chunk_buffer->chunkBytes, thread);
         }
     }
     (void) totalChunks;

@@ -203,35 +203,21 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
     
     fp_rx = fopen(writeFile, "w");
 
-    if (partition == TWOENDS){
-        int t;
-        for (t = 0; t < NUMTHREADS; t++){
-            char filename[5];
-            sprintf(filename, "%d", t);
-            threadCtrl.fp_rx_thread[t] = fopen(filename, "w");
-
-            threadCtrl.thread_buf[t].buf = (char*)malloc(bytesPerChunk * recv_buf_size);
-            threadCtrl.thread_buf[t].occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
-            threadCtrl.thread_buf[t].startChunkNum = 0;
-            threadCtrl.thread_buf[t].count = 0;
-        }
-    }
-    else {
-        recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
-        recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
-        recv_buf.startChunkNum = 0;
-        recv_buf.count = 0;
-    }
+    
+    recv_buf.buf = (char*)malloc(bytesPerChunk * recv_buf_size);
+    recv_buf.occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
+    recv_buf.startChunkNum = 0;
+    recv_buf.count = 0;
 }
 
-bool storeData(char* content, int chunkNumber, int bytesReceived){
+bool storeData(char* content, int chunkNumber, int bytesReceived, int threadNum){
     switch (partitionMethod){
         case ALTERNATE:
         case CONSECUTIVE:
             return InOrderStore(content, chunkNumber, bytesReceived);
             break;
         case TWOENDS:
-            return ThreadStore(content, chunkNumber, bytesReceived);
+            return ThreadStore(content, chunkNumber, bytesReceived, threadNum);
         default:
             return false;
             break;
@@ -301,13 +287,18 @@ void writeToFile(){
 }
 
 void finalizeWrite(){
-    fptr1 = fopen(threadCtrl.fp_rx_thread[initialThreadSegment], "w");
+    char c;
+    FILE* fptr1 = fopen(threadCtrl.fp_rx_thread[initialThreadSegment], "w");
+    FILE* fptr2 = fopen(threadCtrl.fp_rx_thread[1 - initialThreadSegment], "w");
+
+    // Copy first segment to output file
     while ( (c = fgetc(fptr1)) != EOF ){
-        fputc(a, fp_rx);
-    } 
-    fptr2 = fopen(threadCtrl.fp_rx_thread[1 - initialThreadSegment], "w");
+        fputc(c, fp_rx);
+    }
+
+    // Copy second segment to output file
     while ( (c = fgetc(fptr1)) != EOF ){
-        fputc(a, fp_rx);
+        fputc(c, fp_rx);
     } 
 }
 
