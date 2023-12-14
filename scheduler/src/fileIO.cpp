@@ -151,9 +151,10 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
 }
 
 int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
-    
+    pthread_mutex_lock(&mutex);
+
     /* Check if already completed reading */
-    if (threadCtrl.chunkIdx[0] >= threadCtrl.chunkIdx[1]){
+    if (threadCtrl.chunkIdx[0] > threadCtrl.chunkIdx[1]){
         *chunkNumPtr = threadCtrl.chunkIdx[0];
         return 0;
     }
@@ -161,7 +162,6 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
     int *chunk = threadCtrl.chunkIdx + partition;
 
     memset(buf, 0, chunkSize);
-    pthread_mutex_lock(&mutex);
     fseek(fp_tx, (*chunk) * chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp_tx);
     
@@ -188,7 +188,7 @@ bool hasMoreChunks(int thread){
     case ALTERNATE:
         return threadCtrl.chunkIdx[thread] <= (totalChunks - NUMTHREADS + thread);
     case TWOENDS:
-        return threadCtrl.chunkIdx[1] < threadCtrl.chunkIdx[0];
+        return threadCtrl.chunkIdx[1] <= threadCtrl.chunkIdx[0];
     }
     
     return false;
