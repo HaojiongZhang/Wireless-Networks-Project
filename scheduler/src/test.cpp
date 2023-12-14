@@ -5,10 +5,10 @@
 #include <thread>
 #include <unistd.h>
 
-#define CHUNKSIZE 1024
+#define CHUNKSIZE 1400*100
 
 struct chunk_t{
-    char chunk_buf[CHUNK_SIZE];
+    char chunk_buf[CHUNKSIZE];
 	unsigned int chunkBytes;
 	int chunkIdx;
 };
