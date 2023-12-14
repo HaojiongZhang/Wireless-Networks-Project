@@ -221,11 +221,8 @@ int main(int argc, char** argv) {
 	int s1 = createSocket(udpPort);
 	int s2 = createSocket(udpPort);
 
-	receiveData(s1, 0);
-	receiveData(s2, 1);
-
-	std::thread thread1(receiveData, s1);
-	std::thread thread2(receiveData, s2);
+	std::thread thread1(receiveData, s1, 0);
+	std::thread thread2(receiveData, s2, 1);
 	std::thread thread3(writeToFile);
 
 	thread1.join();
