@@ -22,7 +22,7 @@ typedef struct{
     int count;
     char* buf;
     bool* occupied;
-    char irregularBuf[1024];
+    char irregularBuf[1400*100];
     int irregularSize;
     pthread_mutex_t mutex;
 }recv_buf_t;
@@ -31,13 +31,13 @@ FILE *fp_tx, *fp_rx;
 int chunkSize;
 int totalChunks;
 partition_t partitionMethod;
-const int recv_buf_size = 512;
-volatile bool fuckPi = false;
+const int recv_buf_size = 64;
+volatile bool endTx = false;
 
 static int currentChunk = 0;
 threadSpecficCtrl_t threadCtrl; 
 recv_buf_t recv_buf;
-recv_buf_t thread_buf[NUMTHREADS];
+int initialThreadSegment = 0;
 
 
 
@@ -45,6 +45,7 @@ int readAltChunk(char* buf, int* chunkNumPtr, int partition);
 int readSequentialChunk(char* buf, int* chunkNumPtr);
 int readEndsChunk(char* buf, int* chunkNumPtr, int partition);
 bool InOrderStore(char* content, int chunkNumber, int bytesReceived);
+bool ThreadStore(char* content, int chunkNumber, int bytesReceived, int threadNum);
 
 
 // Init fileIO and return total number of chunks of the file
@@ -150,18 +151,17 @@ int readSequentialChunk(char* buf, int* chunkNumPtr){
 }
 
 int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
-    pthread_mutex_lock(&mutex);
+    
     /* Check if already completed reading */
-    if (threadCtrl.chunkIdx[0] == threadCtrl.chunkIdx[1]){
+    if (threadCtrl.chunkIdx[0] >= threadCtrl.chunkIdx[1]){
         *chunkNumPtr = threadCtrl.chunkIdx[0];
         return 0;
     }
 
-    int *chunk;
-    chunk = threadCtrl.chunkIdx + partition;
+    int *chunk = threadCtrl.chunkIdx + partition;
 
     memset(buf, 0, chunkSize);
-    
+    pthread_mutex_lock(&mutex);
     fseek(fp_tx, (*chunk) * chunkSize, SEEK_SET);
     int bytesRead = fread(buf, 1, chunkSize, fp_tx);
     
@@ -171,7 +171,12 @@ int readEndsChunk(char* buf, int* chunkNumPtr, int partition){
         return -1;
     }
     *chunkNumPtr = currentChunk;
-    (*chunk)--;
+    if (partition){
+        (*chunk)--;
+    }
+    else{
+        (*chunk)++;
+    }
     pthread_mutex_unlock(&mutex);
     return bytesRead;
 }
@@ -205,10 +210,10 @@ void initFileWrite(char* writeFile, int bytesPerChunk, partition_t partition){
             sprintf(filename, "%d", t);
             threadCtrl.fp_rx_thread[t] = fopen(filename, "w");
 
-            thread_buf[t].buf = (char*)malloc(bytesPerChunk * recv_buf_size);
-            thread_buf[t].occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
-            thread_buf[t].startChunkNum = 0;
-            thread_buf[t].count = 0;
+            threadCtrl.thread_buf[t].buf = (char*)malloc(bytesPerChunk * recv_buf_size);
+            threadCtrl.thread_buf[t].occupied = (bool*)calloc(sizeof(bool), recv_buf_size);
+            threadCtrl.thread_buf[t].startChunkNum = 0;
+            threadCtrl.thread_buf[t].count = 0;
         }
     }
     else {
@@ -225,13 +230,15 @@ bool storeData(char* content, int chunkNumber, int bytesReceived){
         case CONSECUTIVE:
             return InOrderStore(content, chunkNumber, bytesReceived);
             break;
+        case TWOENDS:
+            return ThreadStore(content, chunkNumber, bytesReceived);
         default:
             return false;
             break;
     }
 }
 
-bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived, int threadNum){
     pthread_mutex_lock(&(recv_buf.mutex));
 
     int idx = chunkNumber - recv_buf.startChunkNum;
@@ -257,9 +264,15 @@ bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
     }
 }
 
+bool ThreadStore(char* content, int chunkNumber, int bytesReceived, int threadNum){
+    fwrite(content, 1, bytesReceived, threadCtrl.fp_rx_thread[threadNum]);
+    if (chunkNumber == 0){
+        initialThreadSegment = threadNum;
+    }
+}
+
 void writeToFile(){
     while (true){
-        
 
         int count = 0;
         while (recv_buf.occupied[count]){
@@ -280,13 +293,23 @@ void writeToFile(){
         }
         
 
-        if (fuckPi && recv_buf.count == 0){
+        if (endTx && recv_buf.count == 0){
             fwrite(recv_buf.irregularBuf, recv_buf.irregularSize, 1, fp_rx);
             return;
         }
     }
 }
 
+void finalizeWrite(){
+    fptr1 = fopen(threadCtrl.fp_rx_thread[initialThreadSegment], "w");
+    while ( (c = fgetc(fptr1)) != EOF ){
+        fputc(a, fp_rx);
+    } 
+    fptr2 = fopen(threadCtrl.fp_rx_thread[1 - initialThreadSegment], "w");
+    while ( (c = fgetc(fptr1)) != EOF ){
+        fputc(a, fp_rx);
+    } 
+}
 
 
 void closeFile(){
@@ -295,4 +318,8 @@ void closeFile(){
 
 void closeWriteFile(){
     fclose(fp_rx);
+    if (partitionMethod == TWOENDS){
+        fclose(threadCtrl.fp_rx_thread[0]);
+        fclose(threadCtrl.fp_rx_thread[1]);
+    }
 }

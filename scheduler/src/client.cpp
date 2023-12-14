@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
 
 	thread1.join();
 	thread2.join();
-	fuckPi = true;
+	endTx = true;
 	thread3.join();
 	
 	closeWriteFile();
