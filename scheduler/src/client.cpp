@@ -170,7 +170,7 @@ void reliablyReceive(int s, char* largeBuffer, size_t largeBufferSize) {
     
     }
 
-void receiveData(int socket) {
+void receiveData(int socket, int threadNum) {
 	const size_t LARGE_BUFFER_SIZE = sizeof(chunk_t); // 10 MB, for example
     char* largeBuffer = (char*)malloc(LARGE_BUFFER_SIZE);
     if (!largeBuffer) {
@@ -190,7 +190,7 @@ void receiveData(int socket) {
 			break;
 		}
 		//fwrite(largeBuffer, 1, LARGE_BUFFER_SIZE, stdout);
-		storeData(packet.chunk_buf, packet.chunkIdx, packet.chunkBytes);
+		storeData(packet.chunk_buf, packet.chunkIdx, packet.chunkBytes, threadNum);
     	//memset(largeBuffer, 0, LARGE_BUFFER_SIZE);
 		
  
@@ -221,8 +221,8 @@ int main(int argc, char** argv) {
 	int s1 = createSocket(udpPort);
 	int s2 = createSocket(udpPort);
 
-	receiveData(s1);
-	receiveData(s2);
+	receiveData(s1, 0);
+	receiveData(s2, 1);
 
 	std::thread thread1(receiveData, s1);
 	std::thread thread2(receiveData, s2);
