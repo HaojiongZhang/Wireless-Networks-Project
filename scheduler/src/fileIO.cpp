@@ -224,7 +224,7 @@ bool storeData(char* content, int chunkNumber, int bytesReceived, int threadNum)
     }
 }
 
-bool InOrderStore(char* content, int chunkNumber, int bytesReceived, int threadNum){
+bool InOrderStore(char* content, int chunkNumber, int bytesReceived){
     pthread_mutex_lock(&(recv_buf.mutex));
 
     int idx = chunkNumber - recv_buf.startChunkNum;
@@ -248,8 +248,6 @@ bool InOrderStore(char* content, int chunkNumber, int bytesReceived, int threadN
         pthread_mutex_unlock(&(recv_buf.mutex));
         return false;
     }
-
-    (void) threadNum;
 }
 
 bool ThreadStore(char* content, int chunkNumber, int bytesReceived, int threadNum){
