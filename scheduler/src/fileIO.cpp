@@ -288,8 +288,8 @@ void writeToFile(){
 
 void finalizeWrite(){
     char c;
-    FILE* fptr1 = fopen(threadCtrl.fp_rx_thread[initialThreadSegment], "w");
-    FILE* fptr2 = fopen(threadCtrl.fp_rx_thread[1 - initialThreadSegment], "w");
+    FILE* fptr1 = threadCtrl.fp_rx_thread[initialThreadSegment],;
+    FILE* fptr2 = threadCtrl.fp_rx_thread[1 - initialThreadSegment];
 
     // Copy first segment to output file
     while ( (c = fgetc(fptr1)) != EOF ){
