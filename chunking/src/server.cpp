@@ -63,7 +63,7 @@ void sendChunk(int socket, int threadNum) {
     }
 }
 int main(int argc, char** argv) {
-    if (argc != 4) {
+    if (argc != 5) {
         std::cerr << "Usage: " << argv[0] << " <filename> <server IP> <esp32 IP> <port>" << std::endl;
         return 1;
     }
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     //int totalChunks = initFileRead(filename, CHUNK_SIZE, CONSECUTIVE);
 
     const char* interfaceName1 = "wlan0";
-    const char* interfaceName2 = "wlan0";
+    const char* interfaceName2 = "espsta0";
 
     // Create two sockets for two threads
     int socket1 = createSocketAndConnect(port, serverIP, interfaceName1);
