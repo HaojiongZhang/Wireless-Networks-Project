@@ -59,6 +59,7 @@ void sendChunk(int socket, int threadNum) {
             memcpy(tmpBuffer, &packet, sizeof(packet));
             
             send(socket, tmpBuffer, sizeof(tmpBuffer), 0);
+ 	    usleep(500*1000);
         }
     }
 }
